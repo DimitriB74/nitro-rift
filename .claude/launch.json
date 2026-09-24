@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "nitro-rift",
+      "runtimeExecutable": "D:/Code/Claude/_node/node-v24.21.0-win-x64/npm.cmd",
+      "runtimeArgs": ["run", "start"],
+      "port": 3000
+    },
+    {
+      "name": "nitro-rift-dev",
+      "runtimeExecutable": "D:/Code/Claude/_node/node-v24.21.0-win-x64/npm.cmd",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173
+    }
+  ]
+}

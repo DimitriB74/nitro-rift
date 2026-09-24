@@ -28,13 +28,13 @@ export function simuleBot(circuit, ligne, o = {}) {
   const voiture = o.voiture ?? circuit.voitureFavorite;
   const params = parametresVoiture(voiture, o.niveaux ?? {});
   const depart = placeGrille(circuit, o.rang ?? 0, COURSE.grille);
+  const toursVises = o.tours ?? circuit.tours;
 
-  const etat = creerVoiture(circuit, params, depart);
+  const etat = creerVoiture(circuit, params, depart, { tours: toursVises });
   const bot = creerBot(circuit, ligne, o.niveau ?? 'difficile', o.graine ?? 7);
 
   const dt = o.dt ?? 1 / 60;
   const tempsMax = o.tempsMax ?? 600;
-  const toursVises = o.tours ?? circuit.tours;
 
   let vitesseMax = 0;
   let sommeVitesse = 0;

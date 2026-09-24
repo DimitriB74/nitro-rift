@@ -16,8 +16,12 @@ export const PHYS = {
 
   /** Pas de simulation fixe (s). 120 Hz : stable dans les loopings. */
   pasFixe: 1 / 120,
-  /** Nombre maximal de sous-pas rattrapés en une image (anti-spirale de la mort). */
-  sousPasMax: 8,
+  /**
+   * Nombre maximal de sous-pas rattrapés en une image (anti-spirale de la mort).
+   * 16 sous-pas à 120 Hz = 133 ms : le jeu reste en temps réel jusqu'à 7 images
+   * par seconde. En dessous, il ralentit volontairement plutôt que de s'effondrer.
+   */
+  sousPasMax: 16,
 
   /** Hauteur au-dessus de la piste en dessous de laquelle la voiture reste collée. */
   hauteurAccroche: 1.2,
@@ -111,6 +115,7 @@ export const HORS_PISTE = {
 // ---------------------------------------------------------------------------
 export const CAMERA = {
   distances: { proche: 7.4, normale: 9.2, eloignee: 11.5 },
+  libelles: { proche: 'Proche', normale: 'Normale', eloignee: 'Éloignée' },
   hauteur: 3.2,
   regardDevant: 8.0,
   /** Champ de vision (degrés) à l'arrêt et à pleine vitesse sous nitro. */

@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NITRO RIFT</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <!-- ===================================================================== -->
+  <!-- Chargement                                                            -->
+  <!-- ===================================================================== -->
+  <section class="ecran actif" id="ecran-chargement">
+    <div class="centre">
+      <h1 class="titre-jeu" data-nom-jeu></h1>
+      <p class="sous-titre" id="chargement-texte">Chargement…</p>
+      <div class="barre"><div class="barre-remplissage" id="chargement-barre"></div></div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- Menu principal                                                        -->
+  <!-- ===================================================================== -->
+  <section class="ecran" id="ecran-menu">
+    <div class="bandeau">
+      <h1 class="titre-jeu petit" data-nom-jeu></h1>
+      <div class="credits-joueur" id="credits-joueur" hidden>
+        <span class="pastille">¤</span> <span id="credits-valeur">0</span>
+      </div>
+    </div>
+    <div class="centre">
+      <nav class="menu">
+        <button class="bouton principal" data-action="grand-prix">Grand Prix</button>
+        <button class="bouton principal" data-action="contre-la-montre">Contre‑la‑montre</button>
+        <button class="bouton" data-action="garage" disabled>Garage <small>(étape 10)</small></button>
+        <button class="bouton" data-action="classements" disabled>Classements <small>(étape 10)</small></button>
+        <button class="bouton" data-action="parametres">Paramètres</button>
+      </nav>
+      <p class="note" id="note-menu"></p>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- Configuration d'une course solo                                       -->
+  <!-- ===================================================================== -->
+  <section class="ecran" id="ecran-config">
+    <div class="bandeau">
+      <button class="bouton retour" data-action="retour-menu">← Retour</button>
+      <h2 id="config-titre">Course solo</h2>
+      <span></span>
+    </div>
+    <div class="centre large">
+      <div class="panneau">
+        <h3>Circuit</h3>
+        <div class="grille-circuits" id="liste-circuits"></div>
+      </div>
+
+      <div class="panneau">
+        <h3>Voiture</h3>
+        <div class="grille-voitures" id="liste-voitures"></div>
+      </div>
+
+      <div class="panneau" id="panneau-adversaires">
+        <h3>Adversaires</h3>
+        <div class="ligne-reglage">
+          <label for="nb-bots">Nombre de bots</label>
+          <input type="range" id="nb-bots" min="0" max="7" value="5" />
+          <output id="nb-bots-valeur">5</output>
+        </div>
+        <div class="ligne-reglage">
+          <label>Niveau</label>
+          <div class="segments" id="niveau-bots">
+            <button class="segment" data-niveau="facile">Facile</button>
+            <button class="segment actif" data-niveau="moyen">Moyen</button>
+            <button class="segment" data-niveau="difficile">Difficile</button>
+          </div>
+        </div>
+      </div>
+
+      <button class="bouton principal grand" data-action="lancer">Lancer la course</button>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- Paramètres                                                            -->
+  <!-- ===================================================================== -->
+  <section class="ecran" id="ecran-parametres">
+    <div class="bandeau">
+      <button class="bouton retour" data-action="retour-menu">← Retour</button>
+      <h2>Paramètres</h2>
+      <span></span>
+    </div>
+    <div class="centre large">
+      <div class="panneau">
+        <h3>Qualité graphique</h3>
+        <div class="segments" id="choix-qualite"></div>
+        <p class="note">Objectif : 60 images/s en « Moyen » sur une carte graphique intégrée.</p>
+      </div>
+      <div class="panneau">
+        <h3>Caméra</h3>
+        <div class="segments" id="choix-camera"></div>
+        <label class="case"><input type="checkbox" id="afficher-fps" /> Afficher les images par seconde</label>
+      </div>
+      <div class="panneau">
+        <h3>Touches</h3>
+        <div class="liste-touches" id="liste-touches"></div>
+        <button class="bouton petit" data-action="touches-defaut">Rétablir les touches par défaut</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- Course : HUD                                                          -->
+  <!-- ===================================================================== -->
+  <section class="ecran transparent" id="ecran-course">
+    <div class="hud">
+      <div class="hud-haut-gauche">
+        <div class="position"><span id="hud-position">1</span><small id="hud-position-total">/8</small></div>
+        <div class="tour">Tour <span id="hud-tour">1</span>/<span id="hud-tours">3</span></div>
+      </div>
+
+      <div class="hud-haut-centre">
+        <div class="chrono" id="hud-chrono">0:00.00</div>
+        <div class="intermediaire" id="hud-intermediaire"></div>
+      </div>
+
+      <div class="hud-gauche">
+        <ol class="classement" id="hud-classement"></ol>
+      </div>
+
+      <div class="hud-bas-gauche">
+        <canvas id="minimap" width="220" height="220"></canvas>
+      </div>
+
+      <div class="hud-bas-droite">
+        <div class="compteur">
+          <span id="hud-vitesse">0</span><small>km/h</small>
+        </div>
+        <div class="jauge nitro"><div class="jauge-remplissage" id="hud-nitro"></div></div>
+        <div class="jauge derapage"><div class="jauge-remplissage" id="hud-derapage"></div></div>
+      </div>
+
+      <div class="hud-centre">
+        <div class="compte-a-rebours" id="hud-compte"></div>
+        <div class="messages" id="hud-messages"></div>
+      </div>
+
+      <div class="fps" id="hud-fps" hidden>0 FPS</div>
+    </div>
+
+    <div class="voile-pause" id="voile-pause" hidden>
+      <div class="panneau">
+        <h2>Pause</h2>
+        <button class="bouton principal" data-action="reprendre">Reprendre</button>
+        <button class="bouton" data-action="recommencer">Recommencer</button>
+        <button class="bouton" data-action="quitter-course">Quitter la course</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- Résultats                                                             -->
+  <!-- ===================================================================== -->
+  <section class="ecran" id="ecran-resultats">
+    <div class="centre large">
+      <h2 id="resultats-titre">Résultats</h2>
+      <table class="tableau-resultats">
+        <thead>
+          <tr><th>#</th><th>Pilote</th><th>Voiture</th><th>Temps</th><th>Meilleur tour</th></tr>
+        </thead>
+        <tbody id="resultats-corps"></tbody>
+      </table>
+      <div class="panneau" id="resultats-gains"></div>
+      <div class="actions">
+        <button class="bouton principal" data-action="rejouer">Rejouer</button>
+        <button class="bouton" data-action="retour-menu">Menu principal</button>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

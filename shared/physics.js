@@ -40,14 +40,18 @@ export function normaliseEntrees(e = {}) {
  * @param {object} circuit   circuit construit par construireCircuit()
  * @param {object} params    paramètres physiques issus de parametresVoiture()
  * @param {object} depart    { s, n }
+ * @param {object} options   { tours } : nombre de tours à courir. Il vient de la
+ *                           course, pas du circuit — un contre-la-montre se joue
+ *                           sur un tour et l'hôte d'un salon peut le régler.
  */
-export function creerVoiture(circuit, params, depart = { s: 0, n: 0 }) {
+export function creerVoiture(circuit, params, depart = { s: 0, n: 0 }, options = {}) {
   const f = frameA(circuit, depart.s);
   const pos = positionMonde(circuit, depart.s, depart.n ?? 0, 0);
 
   const etat = {
     params,
     circuitId: circuit.id,
+    toursCible: options.tours ?? circuit.tours,
 
     // Repère monde
     pos,
@@ -583,9 +587,9 @@ function majProgression(etat, circuit, sNouveau) {
       }
       pr.mursCeTour = 0;
       pr.tour = Math.floor(pr.valides / nbCp);
-      evenement(etat, 'tour', { tour: pr.tour, total: circuit.tours });
+      evenement(etat, 'tour', { tour: pr.tour, total: etat.toursCible });
 
-      if (pr.valides >= nbCp * circuit.tours + 1) {
+      if (pr.valides >= nbCp * etat.toursCible + 1) {
         pr.termine = true;
         pr.tempsTotal = etat.temps;
         evenement(etat, 'arrivee', { temps: etat.temps });
