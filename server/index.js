@@ -15,6 +15,7 @@ import { GAME_NAME, VERSION } from '../shared/config.js';
 import { baseConnectee, connecterBase } from './db.js';
 import { brancheAuth } from './auth.js';
 import { brancheAdmin } from './admin.js';
+import { brancheGarage } from './garage.js';
 import { brancheMultijoueur } from './multijoueur.js';
 
 const ICI = path.dirname(fileURLToPath(import.meta.url));
@@ -50,6 +51,7 @@ app.get('/health', (req, res) => {
 // ---------------------------------------------------------------------------
 brancheAuth(app);
 brancheAdmin(app);
+brancheGarage(app);
 
 // ---------------------------------------------------------------------------
 // Circuits

@@ -64,8 +64,8 @@
       <nav class="menu">
         <button class="bouton principal" data-action="grand-prix">Grand Prix</button>
         <button class="bouton principal" data-action="contre-la-montre">Contre‑la‑montre</button>
-        <button class="bouton" data-action="garage" disabled>Garage <small>(étape 10)</small></button>
-        <button class="bouton" data-action="classements" disabled>Classements <small>(étape 10)</small></button>
+        <button class="bouton" data-action="garage">Garage</button>
+        <button class="bouton" data-action="classements">Classements</button>
         <button class="bouton" data-action="parametres">Paramètres</button>
         <button class="bouton discret" data-action="deconnexion" id="bouton-deconnexion" hidden>Déconnexion</button>
       </nav>
@@ -179,6 +179,53 @@
       </div>
 
       <button class="bouton principal grand" data-action="lancer">Lancer la course</button>
+    </div>
+  </section>
+
+
+  <!-- ===================================================================== -->
+  <!-- Garage                                                                -->
+  <!-- ===================================================================== -->
+  <section class="ecran" id="ecran-garage">
+    <div class="bandeau">
+      <button class="bouton retour" data-action="retour-menu">← Retour</button>
+      <h2>Garage</h2>
+      <div class="credits-joueur"><span class="pastille">¤</span> <span id="garage-credits">0</span></div>
+    </div>
+    <div class="centre large">
+      <div class="colonnes">
+        <div class="panneau">
+          <h3>Voitures</h3>
+          <div id="garage-liste" class="choix-voitures"></div>
+          <h3 style="margin-top:18px">Peinture</h3>
+          <div id="garage-peintures" class="choix-peintures"></div>
+        </div>
+        <div class="panneau">
+          <h3 id="garage-nom">—</h3>
+          <p class="aide" id="garage-profil"></p>
+          <div id="garage-stats"></div>
+          <p class="erreur" id="garage-erreur"></p>
+          <div class="actions"><button class="bouton principal" id="garage-action">—</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- Classements                                                           -->
+  <!-- ===================================================================== -->
+  <section class="ecran" id="ecran-classements">
+    <div class="bandeau">
+      <button class="bouton retour" data-action="retour-menu">← Retour</button>
+      <h2>Classements</h2>
+    </div>
+    <div class="centre large">
+      <div class="choix-voitures" id="classements-circuits"></div>
+      <div class="panneau" style="margin-top:14px">
+        <h3 id="classements-titre">—</h3>
+        <p class="aide" id="classements-cibles"></p>
+        <div id="classements-corps"></div>
+      </div>
     </div>
   </section>
 

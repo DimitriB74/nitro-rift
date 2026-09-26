@@ -22,6 +22,8 @@ import { demandeConnexion, majBandeau } from './ui/auth.js';
 import { deconnexion, reprendSession } from './net/api.js';
 import { Reseau, TamponDistant } from './net/socket.js';
 import { EcranSalon } from './ui/salon.js';
+import { Garage, Classements } from './ui/garage.js';
+import { jetonActuel } from './net/api.js';
 
 // ---------------------------------------------------------------------------
 // Écrans
@@ -119,6 +121,13 @@ class Jeu {
     if (!this.profil) this.profil = await demandeConnexion(montre);
 
     majBandeau(this.profil);
+
+    this.garage = new Garage(() => jetonActuel(), (profil) => {
+      this.profil = profil;
+      majBandeau(profil);
+    });
+    this.classements = new Classements(this.catalogue, this.profil?.pseudo ?? null);
+
     montre('ecran-menu');
   }
 
@@ -552,6 +561,16 @@ function construitInterface(jeu) {
     'retour-mode': () => montre('ecran-mode'),
     'quitter-salon': () => { jeu.reseau?.quitter(); montre('ecran-multi'); },
     'parametres': () => { construitParametres(jeu); montre('ecran-parametres'); },
+    'garage': () => {
+      if (!jeu.profil) {
+        document.getElementById('note-menu').textContent =
+          'Le garage demande un compte : déconnecte-toi pour en créer un.';
+        return;
+      }
+      jeu.garage.ouvre(jeu.profil);
+      montre('ecran-garage');
+    },
+    'classements': () => { jeu.classements.ouvre(); montre('ecran-classements'); },
     'retour-menu': () => { jeu.course = null; montre('ecran-menu'); },
     'deconnexion': async () => {
       deconnexion();
@@ -792,7 +811,6 @@ function afficheResultats(jeu) {
       '</tr>';
   }).join('');
 
-  // Le détail des gains est calculé par le serveur à l'étape 10.
   const moi = resultats.find((r) => r.humain);
   const gains = document.getElementById('resultats-gains');
   gains.innerHTML =
@@ -804,8 +822,69 @@ function afficheResultats(jeu) {
     ligneStat('Loopings', moi.stats.loopings) +
     ligneStat('Murs touchés', moi.stats.murs) +
     ligneStat('Réapparitions', moi.stats.reapparitions) +
-    '<p class="note">Les crédits, médailles et défis arriveront à l’étape 10, ' +
-    'calculés par le serveur.</p>';
+    '<div id="resultats-credits"></div>';
+
+  envoieResultat(jeu, course, resultats, moi);
+}
+
+/**
+ * Déclare le résultat au serveur, qui calcule les crédits.
+ *
+ * Le client n'annonce que ce qu'il a fait ; le barème, les plafonds et les
+ * défis sont appliqués côté serveur. En mode invité, on n'envoie rien et on
+ * le dit.
+ */
+async function envoieResultat(jeu, course, resultats, moi) {
+  const bloc = document.getElementById('resultats-credits');
+  if (!bloc) return;
+
+  if (!jeu.profil) {
+    bloc.innerHTML = '<p class="note">Mode invité : aucun crédit n’est gagné. ' +
+      'Crée un compte pour progresser.</p>';
+    return;
+  }
+
+  bloc.innerHTML = '<p class="note">Calcul des gains…</p>';
+
+  const adversaires = resultats
+    .filter((r) => !r.humain)
+    .map((r) => ({ type: 'bot', niveau: r.niveau ?? 'moyen' }));
+
+  try {
+    const reponse = await fetch('/api/course/resultat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${jetonActuel()}` },
+      body: JSON.stringify({
+        circuit: course.circuit.id,
+        mode: course.mode,
+        voiture: moi.voiture,
+        position: moi.position,
+        arrive: moi.arrive,
+        participants: resultats.length,
+        meilleurTour: moi.meilleurTour,
+        adversaires,
+        stats: moi.stats,
+      }),
+    });
+    const data = await reponse.json();
+    if (!reponse.ok) throw new Error(data.erreur ?? 'Erreur serveur');
+
+    jeu.profil = data.profil;
+    majBandeau(data.profil);
+
+    const lignes = (data.lignes ?? [])
+      .map((l) => ligneStat(l.libelle + (l.detail ? ` <small style="opacity:.6">${echappe(l.detail)}</small>` : ''),
+        `+${l.credits} ¤`))
+      .join('');
+
+    bloc.innerHTML = `<h3 style="margin-top:14px">Gains</h3>${lignes}` +
+      ligneStat('<b>Total</b>', `<b>+${data.gains} ¤</b>`) +
+      (data.defis.length
+        ? `<p class="note">Défi réussi : ${data.defis.map((d) => echappe(d.nom)).join(', ')}</p>`
+        : '');
+  } catch (e) {
+    bloc.innerHTML = `<p class="erreur">Gains non enregistrés : ${echappe(e.message)}</p>`;
+  }
 }
 
 /** Ordinal français : 1re, 2e, 3e... */

@@ -449,3 +449,46 @@ html, body {
 
 .ligne-bot { display: flex; gap: 6px; margin-top: 8px; }
 .ligne-bot button { flex: 1; font-size: 12px; padding: 7px 4px; }
+
+/* --------------------------------------------------------------------------
+   Garage et classements
+   -------------------------------------------------------------------------- */
+.choix-peintures { display: flex; flex-wrap: wrap; gap: 6px; }
+.choix-peintures button {
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.18); cursor: pointer; padding: 0;
+}
+.choix-peintures button.actif { border-color: #fff; transform: scale(1.12); }
+.choix-peintures button.verrouille { opacity: 0.32; cursor: not-allowed; }
+
+.stat-ligne { margin-bottom: 11px; }
+.stat-entete {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 12px; margin-bottom: 4px;
+}
+.stat-entete .niveau { font-family: ui-monospace, monospace; color: #8791a0; }
+.stat-barre {
+  height: 8px; border-radius: 4px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.09); display: flex;
+}
+.stat-barre .base { background: #6f7f95; }
+.stat-barre .bonus { background: var(--accent, #f0a13c); }
+.stat-ligne button {
+  margin-top: 4px; width: 100%; padding: 5px; font-size: 11.5px;
+  border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.05); color: inherit; cursor: pointer;
+}
+.stat-ligne button:disabled { opacity: 0.35; cursor: default; }
+
+.table-classement { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.table-classement td, .table-classement th {
+  padding: 6px 8px; text-align: left; border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.table-classement th { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: #8791a0; }
+.table-classement td.temps { font-family: ui-monospace, monospace; text-align: right; }
+.table-classement tr.moi { background: rgba(255, 255, 255, 0.07); }
+.medaille { font-size: 11px; padding: 1px 6px; border-radius: 4px; }
+.medaille.platine { background: #dfe7ef; color: #1b2430; }
+.medaille.or { background: #e9b949; color: #2a1e04; }
+.medaille.argent { background: #b8c0c9; color: #1b2430; }
+.medaille.bronze { background: #b07a4a; color: #23150a; }

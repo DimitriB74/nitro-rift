@@ -12,7 +12,9 @@
     "tracks": "node scripts/build-tracks.js",
     "calibrate": "node scripts/calibrate-medals.js",
     "verifier": "node scripts/verifier.js",
-    "test:multi": "node test/multijoueur.mjs"
+    "test:multi": "node test/multijoueur.mjs",
+    "test:garage": "node test/garage.mjs",
+    "test:navigateur": "node test/salon-navigateur.mjs && node test/garage-navigateur.mjs"
   },
   "engines": {
     "node": ">=20"
