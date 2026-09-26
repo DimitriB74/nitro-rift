@@ -25,6 +25,9 @@ const HZ_SIMULATION = 60;
 const DT = 1 / HZ_SIMULATION;
 const DELAI_DEPART = 3.5; // secondes avant le feu vert, compte à rebours compris
 
+/** Tours attribués en session de contre-la-montre : personne ne les bouclera. */
+const TOURS_SESSION = 999;
+
 /**
  * Marge de tolérance du contrôle de plausibilité.
  *
@@ -52,8 +55,20 @@ export class CourseServeur {
     this.tempsReference = reference ?? 0;
     this.apresFin = apresFin;
 
-    this.tours = salon.tours ?? circuit.tours ?? COURSE.toursParDefaut;
+    /**
+     * Session de contre-la-montre : pas d'arrivée, un chronomètre. Chacun
+     * enchaîne les tours pendant la durée prévue, et c'est le meilleur tour qui
+     * classe. On donne alors un nombre de tours volontairement hors d'atteinte
+     * pour que la progression ne se termine jamais d'elle-même.
+     */
+    this.session = salon.mode === 'contre-la-montre';
+    this.duree = this.session ? (salon.duree ?? COURSE.dureeContreLaMontre) : null;
+
+    this.tours = this.session
+      ? TOURS_SESSION
+      : (salon.tours ?? circuit.tours ?? COURSE.toursParDefaut);
     this.heureDepart = Date.now() + DELAI_DEPART * 1000;
+    this.heureFin = this.session ? this.heureDepart + this.duree * 1000 : null;
     this.demarree = false;
     this.finie = false;
     this.premierArriveA = null;
@@ -78,6 +93,7 @@ export class CourseServeur {
       humain.resultat = null;
       humain.etat = null;
       humain.dernierRecu = 0;
+      humain.meilleurTour = null;
     }
 
     for (const bot of this.salon.bots) {
@@ -92,6 +108,7 @@ export class CourseServeur {
         cerveau: creerBot(this.circuit, this.ligne, bot.niveau, 1 + bot.rang * 17),
       });
       bot.resultat = null;
+      bot.meilleurTour = null;
     }
   }
 
@@ -100,8 +117,11 @@ export class CourseServeur {
 
     this.diffuser('course:demarrer', {
       circuit: this.circuit.id,
+      mode: this.session ? 'contre-la-montre' : 'course',
       tours: this.tours,
+      duree: this.duree,
       heureDepart: this.heureDepart,
+      heureFin: this.heureFin,
       maintenant: Date.now(),
       grille: this.grillePublique(),
     });
@@ -153,6 +173,8 @@ export class CourseServeur {
         pasPhysique(bot.etat, entrees, dt, this.circuit);
         videEvenements(bot.etat);
 
+        if (this.session) this.releveTours(bot.ref, bot.etat.progression.tempsTours);
+
         if (bot.etat.progression.termine) {
           this.enregistreArrivee(bot.ref, {
             tempsTotal: bot.etat.progression.tempsTotal,
@@ -162,7 +184,86 @@ export class CourseServeur {
       }
     }
 
+    if (this.session) {
+      if (Date.now() >= this.heureFin) return this.termineSession();
+      return;
+    }
+
     this.verifieFin();
+  }
+
+  /**
+   * Retient le meilleur tour d'un participant.
+   * @returns {boolean} vrai si le record du participant a été amélioré
+   */
+  releveTours(participant, tours) {
+    if (!Array.isArray(tours) || tours.length === 0) return false;
+    const meilleur = Math.min(...tours);
+    if (!Number.isFinite(meilleur) || meilleur <= 0) return false;
+    if (participant.meilleurTour != null && meilleur >= participant.meilleurTour) return false;
+
+    participant.meilleurTour = meilleur;
+    participant.tousLesTours = tours.length;
+    this.classementChange = true;
+    return true;
+  }
+
+  /**
+   * Tour annoncé par un client pendant une session de contre-la-montre.
+   *
+   * Même garde-fou que pour une arrivée : le chronomètre vient de la machine du
+   * joueur, mais un temps physiquement impossible est refusé.
+   */
+  tourClient(socketId, resultat) {
+    if (!this.session || this.finie) return { accepte: false, raison: 'Aucune session en cours' };
+
+    const humain = this.salon.humains.get(socketId);
+    if (!humain) return { accepte: false, raison: 'Joueur inconnu' };
+
+    const temps = Number(resultat?.temps);
+    if (!Number.isFinite(temps) || temps <= 0) return { accepte: false, raison: 'Temps invalide' };
+
+    const minimum = this.tempsReference * MARGE_PLAUSIBILITE;
+    if (this.tempsReference > 0 && temps < minimum) {
+      return { accepte: false, raison: 'Temps jugé impossible' };
+    }
+
+    const ameliore = this.releveTours(humain, [temps, humain.meilleurTour].filter((t) => t != null));
+    if (ameliore) this.diffuseMeilleurs();
+    return { accepte: true, meilleur: humain.meilleurTour, ameliore };
+  }
+
+  /** Classement en direct des meilleurs tours, envoyé à chaque amélioration. */
+  diffuseMeilleurs() {
+    this.diffuser('course:meilleurs', {
+      heureFin: this.heureFin,
+      lignes: this.participantsSession()
+        .map((p) => ({ id: p.id, pseudo: p.pseudo, bot: !!p.bot, meilleurTour: p.meilleurTour ?? null }))
+        .sort((a, b) => (a.meilleurTour ?? Infinity) - (b.meilleurTour ?? Infinity))
+        .map((l, i) => ({ ...l, place: i + 1 })),
+    });
+  }
+
+  participantsSession() {
+    return [...this.salon.humains.values(), ...this.salon.bots, ...this.salon.partis];
+  }
+
+  /** Fin d'une session : le classement se fait au meilleur tour. */
+  termineSession() {
+    if (this.finie) return;
+
+    const tous = this.participantsSession();
+    for (const p of tous) {
+      p.resultat = {
+        tempsTotal: null,
+        tempsTours: [],
+        meilleurTour: p.meilleurTour ?? null,
+        session: true,
+        bot: !!p.bot,
+      };
+    }
+
+    this.termine(tous);
   }
 
   /** État envoyé par un client pour sa propre voiture. */
@@ -274,8 +375,14 @@ export class CourseServeur {
     clearInterval(this.minuteurSim);
     clearInterval(this.minuteurInstantane);
 
+    // En session de contre-la-montre, le temps total n'existe pas : c'est le
+    // meilleur tour qui classe, et celui qui n'en a bouclé aucun ferme la
+    // marche.
     this.classement = tous.slice().sort((a, b) => {
       const ra = a.resultat, rb = b.resultat;
+      if (this.session) {
+        return (ra?.meilleurTour ?? Infinity) - (rb?.meilleurTour ?? Infinity);
+      }
       const aFini = ra?.tempsTotal != null, bFini = rb?.tempsTotal != null;
       if (aFini && bFini) return ra.tempsTotal - rb.tempsTotal;
       if (aFini) return -1;
@@ -290,6 +397,7 @@ export class CourseServeur {
 
     const charge = {
       circuit: this.circuit.id,
+      mode: this.session ? 'contre-la-montre' : 'course',
       classement: this.classement.map((p) => ({
         id: p.id,
         pseudo: p.pseudo,
@@ -298,7 +406,8 @@ export class CourseServeur {
         deconnecte: !!p.deconnecte,
         place: p.resultat.place,
         tempsTotal: p.resultat.tempsTotal,
-        meilleurTour: p.resultat.tempsTours?.length ? Math.min(...p.resultat.tempsTours) : null,
+        meilleurTour: p.resultat.meilleurTour
+          ?? (p.resultat.tempsTours?.length ? Math.min(...p.resultat.tempsTours) : null),
         abandon: !!p.resultat.abandon,
         rejete: !!p.resultat.rejete,
       })),

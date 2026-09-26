@@ -6,6 +6,15 @@
 
 import { VOITURES, IDS_VOITURES } from '@shared/cars.js';
 import { NIVEAUX, IDS_NIVEAUX } from '@shared/bots.js';
+import { COURSE } from '@shared/config.js';
+
+const DUREE_CLM = COURSE.dureeContreLaMontre;
+
+/** « 1 minute », « 5 minutes ». */
+const minutes = (secondes) => {
+  const n = Math.round((secondes ?? DUREE_CLM) / 60);
+  return `${n} minute${n > 1 ? 's' : ''}`;
+};
 import { echappe } from './hud.js';
 
 const $ = (id) => document.getElementById(id);
@@ -68,7 +77,8 @@ export class EcranSalon {
     const gpEnCours = salon.mode === 'grand-prix';
     const manche = gpEnCours ? (salon.grandPrix?.termine ? 1 : salon.grandPrix?.manche ?? 1) : 0;
     lancer.textContent = !tousPrets ? 'En attente des joueurs…'
-      : gpEnCours ? `Lancer la manche ${manche}` : 'Lancer la course';
+      : gpEnCours ? `Lancer la manche ${manche}`
+        : salon.mode === 'contre-la-montre' ? 'Lancer la session' : 'Lancer la course';
   }
 
   afficheParticipants() {
@@ -108,13 +118,16 @@ export class EcranSalon {
     const bloc = $('salon-reglages');
     const gp = this.salon.grandPrix;
     const enGp = this.salon.mode === 'grand-prix';
+    const enClm = this.salon.mode === 'contre-la-montre';
+    const nomMode = enGp ? 'Grand Prix' : enClm ? 'Contre-la-montre' : 'Course';
 
     if (!this.estHote()) {
       const circuit = this.circuits.find((c) => c.id === this.salon.circuit);
-      bloc.innerHTML = `<p class="aide">Mode : <b>${enGp ? 'Grand Prix' : 'Course'}</b><br>
+      bloc.innerHTML = `<p class="aide">Mode : <b>${nomMode}</b><br>
         ${enGp && gp ? `Manche ${gp.manche} sur ${gp.manches}<br>` : ''}
         Circuit : <b>${echappe(circuit?.nom ?? this.salon.circuit)}</b><br>
-        ${this.salon.tours} tour${this.salon.tours > 1 ? 's' : ''}<br>
+        ${enClm ? `${minutes(this.salon.duree)} de session`
+          : `${this.salon.tours} tour${this.salon.tours > 1 ? 's' : ''}`}<br>
         L'hôte choisit les réglages.</p>`;
       this.afficheChampionnat();
       return;
@@ -132,10 +145,18 @@ export class EcranSalon {
 
     bloc.innerHTML = `
       <div class="segments" id="salon-modes">
-        <button class="segment ${enGp ? '' : 'actif'}" data-mode="course">Course</button>
+        <button class="segment ${!enGp && !enClm ? 'actif' : ''}" data-mode="course">Course</button>
         <button class="segment ${enGp ? 'actif' : ''}" data-mode="grand-prix">Grand Prix</button>
+        <button class="segment ${enClm ? 'actif' : ''}" data-mode="contre-la-montre">Contre‑la‑montre</button>
       </div>
       ${blocCircuits}
+      ${enClm ? `
+        <div class="segments" style="margin-top:8px">
+          ${COURSE.dureesContreLaMontre.map((d) => `<button class="segment ${d === this.salon.duree ? 'actif' : ''}"
+            data-duree="${d}">${d / 60} min</button>`).join('')}
+        </div>
+        <p class="aide">Chacun enchaîne les tours pendant la session ;
+          le meilleur tour classe.</p>` : ''}
       <p class="aide" style="margin-top:10px">Ajouter un bot</p>
       <div class="ligne-bot">
         ${IDS_NIVEAUX.map((n) => `<button class="bouton" data-bot="${n}">${NIVEAUX[n].nom}</button>`).join('')}
@@ -143,6 +164,9 @@ export class EcranSalon {
 
     for (const bouton of bloc.querySelectorAll('[data-mode]')) {
       bouton.onclick = () => this.reseau.reglages({ mode: bouton.dataset.mode });
+    }
+    for (const bouton of bloc.querySelectorAll('[data-duree]')) {
+      bouton.onclick = () => this.reseau.reglages({ duree: Number(bouton.dataset.duree) });
     }
     for (const bouton of bloc.querySelectorAll('[data-circuit]')) {
       bouton.onclick = () => this.reseau.reglages({ circuit: bouton.dataset.circuit });

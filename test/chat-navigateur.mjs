@@ -129,7 +129,9 @@ await hote.waitForFunction(() => window.__jeu?.chat?.ouvert === true, { timeout:
 const pendant = await hote.evaluate(() => ({
   ouvert: window.__jeu.chat.ouvert,
   clavier: window.__jeu.clavier.actif,
-  visible: !document.getElementById('chat-course').hidden,
+  // On mesure ce que le navigateur affiche réellement : l'attribut `hidden`
+  // seul ne suffit pas à cacher un bloc dont une classe impose un `display`.
+  visible: getComputedStyle(document.getElementById('chat-course')).display !== 'none',
 }));
 check('la touche T ouvre la saisie et désarme les commandes',
   pendant.ouvert && pendant.clavier === false && pendant.visible);
@@ -168,9 +170,11 @@ const annule = await hote.evaluate(() => ({
   ouvert: window.__jeu.chat.ouvert,
   clavier: window.__jeu.clavier.actif,
   messages: document.querySelectorAll('#chat-messages li').length,
+  saisieVisible: getComputedStyle(document.getElementById('chat-course')).display !== 'none',
 }));
 check('Échap annule la saisie sans rien envoyer',
-  annule.ouvert === false && annule.clavier === true && annule.messages === 4,
+  annule.ouvert === false && annule.clavier === true && annule.messages === 4 &&
+  annule.saisieVisible === false,
   `${annule.messages} messages au total`);
 await invite.screenshot({ path: `${SHOTS}/nr-17-chat-course.png` });
 

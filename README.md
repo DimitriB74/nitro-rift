@@ -41,6 +41,7 @@ npm run build && npm start   # http://localhost:3000
 | `Maj` | nitro |
 | `Entrée` | retour au dernier checkpoint |
 | `Retour arrière` | recommencer (solo et contre-la-montre) |
+| `T` | écrire dans le chat (multijoueur, pendant la course) |
 | `Échap` | pause / menu |
 
 Les touches sont détectées par **position physique** : ZQSD sur AZERTY et WASD
@@ -53,6 +54,30 @@ mini-boost proportionnel. Toucher un mur annule la charge.
 
 ---
 
+## Les modes
+
+| Mode | Solo | Multijoueur |
+|---|---|---|
+| **Course rapide** | une course sur le circuit de ton choix | salon privé, jusqu'à 8 voitures |
+| **Grand Prix** | les 4 circuits enchaînés, points 10-8-6-5-4-3-2-1 | idem, le classement est tenu par le serveur |
+| **Contre-la-montre** | 4 tours seul, avec le fantôme de ton record | session chronométrée de 3, 5 ou 10 minutes |
+
+**Grand Prix.** Les mêmes adversaires disputent les quatre manches. À égalité de
+points, c'est la dernière course qui départage. Le podium du championnat verse
+un bonus (1000, 600, 400 crédits), multiplié par la difficulté des adversaires.
+
+**Contre-la-montre solo.** Quatre tours : le premier part à l'arrêt, les
+suivants sont lancés — les temps de médaille sont calibrés sur un tour lancé, un
+seul tour rendrait le platine inatteignable. Ton record personnel roule avec toi
+sous la forme d'une voiture translucide, et les intermédiaires du record servent
+de référence à chaque checkpoint.
+
+**Contre-la-montre multijoueur.** Chacun enchaîne les tours pendant la session ;
+le classement des meilleurs tours s'affiche en direct et se met à jour à chaque
+amélioration. Le meilleur tour classe, pas la position sur la piste.
+
+---
+
 ## Scripts
 
 | Commande | Rôle |
@@ -60,10 +85,15 @@ mini-boost proportionnel. Toucher un mur annule la charge.
 | `npm run dev` | serveur + client en développement |
 | `npm run build` | construit le client dans `/dist` |
 | `npm start` | serveur de production (sert `/dist`) |
+| `npm test` | toutes les vérifications sans navigateur (≈ 140) |
 | `npm run verifier` | 24 contrôles sans affichage : circuits, bots, voitures |
 | `npm run test:multi` | 22 contrôles du multijoueur avec de vrais clients réseau |
 | `npm run test:garage` | 18 contrôles de l'économie et du garage |
-| `npm run test:navigateur` | salon et garage dans un vrai Chromium |
+| `npm run test:gp` | 23 contrôles du Grand Prix, dont un championnat complet |
+| `npm run test:clm` | 26 contrôles des fantômes et des médailles |
+| `npm run test:session` | 16 contrôles d'une session de contre-la-montre en réseau |
+| `npm run test:chat` | 12 contrôles du chat et de l'anti-inondation |
+| `npm run test:navigateur` | 5 suites dans un vrai Chromium (≈ 60 contrôles) |
 | `npm run calibrate` | recalcule les temps de médaille des circuits |
 | `npm run tracks` | régénère les circuits depuis les scripts de tracé |
 
@@ -148,9 +178,9 @@ server/
   admin.js     page de réinitialisation
 client/src/
   main.js      boucle de jeu et enchaînement des écrans
-  render/      scène, piste, voitures, caméra de poursuite
+  render/      scène, piste, voitures, caméra de poursuite, showroom du garage
   game/        course, circuits, entrées clavier
-  ui/          ATH, salon, garage, connexion, minimap
+  ui/          ATH, salon, garage, chat, connexion, minimap
   net/         API et Socket.io, interpolation
   audio/       son entièrement synthétisé
 ```
@@ -211,12 +241,19 @@ Crédite les auteurs dans [`CREDITS.md`](CREDITS.md).
 
 ## État du projet
 
-Fait : structure, conduite et caméra, physique 3D complète, checkpoints et
-chronométrage, bots à trois niveaux, les 4 circuits, rendu et effets, comptes
-et sauvegarde, multijoueur complet, garage et économie, médailles, défis,
-classements, son.
+Le jeu est complet et jouable de bout en bout : structure, conduite et caméra,
+physique 3D avec loopings et murs, checkpoints et chronométrage, bots à trois
+niveaux, les 4 circuits, rendu et effets, comptes et sauvegarde, multijoueur en
+salon privé, Grand Prix, contre-la-montre avec fantômes, garage avec showroom
+3D, économie, médailles, défis, classements, chat et son synthétisé.
 
-Reste à faire : showroom 3D dans le garage (l'écran est fonctionnel mais en
-2D), Grand Prix enchaînant automatiquement les 4 circuits, contre-la-montre
-avec fantôme, chat textuel, et le remplacement des assets générés par de vrais
-modèles et sons.
+Reste à faire, si tu veux aller plus loin :
+
+- **de vrais assets** — modèles de voitures, HDRI et sons, à la place de ce que
+  le code génère (voir la section précédente) ;
+- **la Montagne enneigée** tourne en 1 min 03 au meilleur tour, un peu au-dessus
+  des 40 à 60 s des trois autres circuits, et son tracé récompense surtout la
+  maniabilité : les quatre voitures y font des temps proches, alors qu'ailleurs
+  la Tempête et la Comète se détachent. `npm run comparer` chiffre l'écart ;
+- **jouer sur téléphone** : l'interface s'adapte, mais il n'y a pas de commandes
+  tactiles.

@@ -74,6 +74,8 @@ export function creerSalon(hote) {
     mode: 'course', // 'course' | 'grand-prix' | 'contre-la-montre'
     circuit: COURSE.grandPrix[0],
     tours: COURSE.toursParDefaut,
+    /** Durée d'une session de contre-la-montre, en secondes. */
+    duree: COURSE.dureeContreLaMontre,
     phase: 'attente', // 'attente' | 'course'
     humains: new Map(), // socketId → participant
     bots: [],
@@ -242,6 +244,7 @@ export function salonPublic(salon) {
     mode: salon.mode,
     circuit: salon.circuit,
     tours: salon.tours,
+    duree: salon.duree,
     phase: salon.phase,
     hoteId: salon.hoteId,
     max: COURSE.participantsMax,

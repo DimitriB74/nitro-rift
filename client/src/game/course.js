@@ -26,6 +26,21 @@ export class Course {
     this.mode = o.mode ?? 'course';
     this.tours = o.tours ?? this.circuit.tours;
 
+    /**
+     * Session de contre-la-montre multijoueur : pas d'arrivée, un chronomètre
+     * commun. `tempsRestant` est tenu à jour par le client, qui connaît l'heure
+     * de fin annoncée par le serveur.
+     */
+    this.session = o.session ?? false;
+    this.duree = o.duree ?? null;
+    /**
+     * Instant de fin, dans l'horloge locale. Le temps restant s'en déduit à
+     * chaque image : l'accumuler image par image le ferait dériver dès que le
+     * rendu ralentit, et deux joueurs ne verraient plus le même décompte.
+     */
+    this.finSession = null;
+    this.tempsRestant = this.duree;
+
     this.phase = 'compte';               // compte | course | fini
     this.tempsAvantDepart = COURSE.compteARebours + 1.2;
     this.temps = 0;
@@ -78,6 +93,10 @@ export class Course {
         this.phase = 'course';
         // Le chronomètre de chaque voiture démarre maintenant.
         for (const p of this.participants) p.etat.temps = 0;
+        // Sans heure de fin imposée par le serveur, la session part d'ici.
+        if (this.session && this.finSession === null) {
+          this.finSession = Date.now() + (this.tempsRestant ?? this.duree ?? 0) * 1000;
+        }
       }
       return;
     }
@@ -105,6 +124,19 @@ export class Course {
 
     this.majClassement();
     this.majFinDeCourse(dt);
+  }
+
+  /**
+   * Cale la fin d'une session sur l'heure annoncée par le serveur, exprimée
+   * dans l'horloge locale. Le temps restant est borné par la durée prévue : une
+   * horloge imparfaitement synchronisée ne doit pas offrir de rallonge.
+   */
+  caleSession(finLocale) {
+    this.finSession = finLocale;
+    this.tempsRestant = Math.min(
+      this.duree ?? Infinity,
+      Math.max(0, (finLocale - Date.now()) / 1000),
+    );
   }
 
   /**
@@ -156,6 +188,20 @@ export class Course {
   }
 
   majFinDeCourse(dt) {
+    // En session, seule l'horloge décide : personne ne franchit d'arrivée.
+    if (this.session) {
+      // Borné par la durée annoncée : une horloge mal synchronisée ne doit pas
+      // afficher plus de temps qu'il n'y en a jamais eu.
+      this.tempsRestant = this.finSession === null
+        ? (this.tempsRestant ?? 0)
+        : Math.min(this.duree ?? Infinity, Math.max(0, (this.finSession - Date.now()) / 1000));
+      if (this.tempsRestant <= 0 && this.phase === 'course') {
+        this.phase = 'fini';
+        this.evenements.push({ type: 'session-finie' });
+      }
+      return;
+    }
+
     if (this.chronoFin !== null) {
       this.chronoFin -= dt;
       if (this.chronoFin <= 0) {

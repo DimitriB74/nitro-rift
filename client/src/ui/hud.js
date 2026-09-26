@@ -10,8 +10,11 @@ export function formateChrono(t, decimales = 2) {
   const signe = t < 0 ? '-' : '';
   const a = Math.abs(t);
   const m = Math.floor(a / 60);
-  const s = a - m * 60;
-  return `${signe}${m}:${s.toFixed(decimales).padStart(decimales + 3, '0')}`;
+  // Sans décimale, on tronque : arrondir afficherait « 0:60 » à 59,7 s. Et la
+  // largeur du rembourrage change, puisqu'il n'y a plus de point décimal.
+  const s = decimales === 0 ? Math.floor(a - m * 60) : a - m * 60;
+  const largeur = decimales === 0 ? 2 : decimales + 3;
+  return `${signe}${m}:${s.toFixed(decimales).padStart(largeur, '0')}`;
 }
 
 export function formateEcart(t) {
@@ -49,7 +52,9 @@ export class Hud {
     this.course = course;
     this.records = recordsIntermediaires;
     this.messages = [];
-    this.e.tours.textContent = course.tours;
+    /** Classement au meilleur tour, fourni par le serveur en session. */
+    this.meilleurs = null;
+    this.e.tours.textContent = course.session ? '∞' : course.tours;
     this.e.positionTotal.textContent = `/${course.participants.length}`;
     this.minimap.prepare(course.circuit);
     this.e.intermediaire.textContent = '';
@@ -74,12 +79,23 @@ export class Hud {
     }
 
     // --- Position et tour ---------------------------------------------------
-    this.e.position.textContent = moi.position;
+    // En session, la place se lit au meilleur tour : être devant sur la piste
+    // ne veut rien dire quand chacun tourne pour son propre chrono.
+    const placeSession = this.meilleurs?.find((l) => l.id === this.monId)?.place;
+    this.e.position.textContent = course.session ? (placeSession ?? '—') : moi.position;
     const tour = Math.min(Math.max(etat.progression.tour, 1), course.tours);
     this.e.tour.textContent = moi.arrive ? course.tours : tour;
 
     // --- Chrono -------------------------------------------------------------
-    this.e.chrono.textContent = formateChrono(course.phase === 'compte' ? 0 : etat.temps);
+    // En session de contre-la-montre, le chronomètre décompte : ce qui importe
+    // est le temps qu'il reste pour améliorer son tour.
+    if (course.session) {
+      const reste = Math.max(0, course.tempsRestant ?? 0);
+      this.e.chrono.textContent = formateChrono(reste, 0);
+      this.e.chrono.classList.toggle('urgence', reste <= 30);
+    } else {
+      this.e.chrono.textContent = formateChrono(course.phase === 'compte' ? 0 : etat.temps);
+    }
 
     // --- Vitesse, nitro, dérapage ------------------------------------------
     this.e.vitesse.textContent = kmh(etat);
@@ -110,7 +126,24 @@ export class Hud {
     this.minimap.dessine(course);
   }
 
+  /** Classement des meilleurs tours, diffusé par le serveur en session. */
+  poseMeilleurs(lignes, monId) {
+    this.meilleurs = lignes;
+    this.monId = monId;
+  }
+
   majClassement(course) {
+    // En session, on classe au meilleur tour, pas à la position sur la piste.
+    if (course.session && this.meilleurs) {
+      this.e.classement.innerHTML = this.meilleurs.map((l) =>
+        `<li class="${l.id === this.monId ? 'moi' : ''}">` +
+        `<span class="rang">${l.place}</span>` +
+        `<span class="nom">${echappe(l.pseudo)}</span>` +
+        `<span class="ecart">${l.meilleurTour != null ? formateChrono(l.meilleurTour, 3) : '—'}</span>` +
+        '</li>').join('');
+      return;
+    }
+
     const html = [];
     for (const p of course.classement) {
       const ecart = course.ecartAvec(p);

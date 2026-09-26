@@ -33,7 +33,7 @@ export class Reseau {
     for (const evenement of [
       'salon:maj', 'salon:erreur', 'salon:exclu', 'salon:nouvel-hote', 'salon:remplacement',
       'course:demarrer', 'course:instantane', 'course:premier', 'course:resultats',
-      'chat:message',
+      'chat:message', 'course:meilleurs',
     ]) {
       this.socket.on(evenement, (charge) => {
         if (evenement === 'salon:maj') this.salon = charge;
@@ -118,6 +118,11 @@ export class Reseau {
 
   envoyerEtat(instantane) {
     this.socket?.emit('course:etat', instantane);
+  }
+
+  /** Tour bouclé pendant une session de contre-la-montre. */
+  annoncerTour(temps) {
+    return new Promise((r) => this.socket.emit('course:tour', { temps }, r));
   }
 
   annoncerArrivee(resultat) {

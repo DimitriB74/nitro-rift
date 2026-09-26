@@ -235,6 +235,10 @@ export function brancheMultijoueur(serveurHttp) {
       if (Number.isInteger(reglages.tours) && reglages.tours >= 1 && reglages.tours <= 10) {
         salon.tours = reglages.tours;
       }
+      if (Number.isInteger(reglages.duree)
+          && reglages.duree >= COURSE.dureeSessionMin && reglages.duree <= COURSE.dureeSessionMax) {
+        salon.duree = reglages.duree;
+      }
       diffuse(salon);
     });
 
@@ -323,6 +327,9 @@ export function brancheMultijoueur(serveurHttp) {
       if (!tousPrets(salon)) return erreur(socket, "Tout le monde n'est pas prêt");
 
       if (salon.mode === 'grand-prix') prepareGrandPrix(salon);
+      // Une session de contre-la-montre se joue sur le circuit choisi, comme
+      // une course : rien de particulier à préparer.
+
 
       let circuit;
       try {
@@ -348,7 +355,19 @@ export function brancheMultijoueur(serveurHttp) {
     socket.on('course:arrivee', (resultat, repondre) => {
       const salon = monSalon();
       if (!salon?.course) return repondre?.({ accepte: false, raison: 'Aucune course' });
-      repondre?.(salon.course.arriveeClient(socket.id, resultat));
+      // On calcule AVANT de répondre : `repondre?.(f())` n'appellerait pas `f`
+      // si le client n'a pas fourni d'accusé de réception — l'appel optionnel
+      // court-circuite aussi ses arguments, et l'arrivée serait perdue.
+      const reponse = salon.course.arriveeClient(socket.id, resultat);
+      repondre?.(reponse);
+    });
+
+    // Contre-la-montre : chaque tour bouclé est annoncé au fil de la session.
+    socket.on('course:tour', (resultat, repondre) => {
+      const salon = monSalon();
+      if (!salon?.course) return repondre?.({ accepte: false, raison: 'Aucune course' });
+      const reponse = salon.course.tourClient(socket.id, resultat);
+      repondre?.(reponse);
     });
 
     // ---- départ -----------------------------------------------------------

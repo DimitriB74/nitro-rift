@@ -18,6 +18,11 @@
 
 * { box-sizing: border-box; }
 
+/* Un `display` posé par une classe l'emporte sur la règle par défaut du
+   navigateur pour [hidden] : sans ceci, un bloc en flex reste visible alors que
+   le code le croit caché. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -226,6 +231,8 @@ html, body {
 
 .hud-haut-centre { top: 16px; left: 50%; transform: translateX(-50%); text-align: center; }
 .hud-haut-centre .chrono { font-size: 34px; font-weight: 700; text-shadow: 0 3px 16px rgba(0,0,0,0.7); }
+/* Dernière demi-minute d'une session de contre-la-montre. */
+.hud-haut-centre .chrono.urgence { color: var(--rouge); }
 .hud-haut-centre .intermediaire { font-size: 19px; font-weight: 700; height: 24px; }
 .intermediaire.avance { color: var(--vert); }
 .intermediaire.retard { color: var(--rouge); }

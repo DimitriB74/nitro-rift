@@ -140,8 +140,12 @@ export const COURSE = {
   points: [10, 8, 6, 5, 4, 3, 2, 1],
   /** Ordre des circuits en Grand Prix. */
   grandPrix: ['canyon', 'ville', 'stade', 'montagne'],
-  /** Durée d'une session de contre-la-montre multijoueur (s). */
+  /** Durée par défaut d'une session de contre-la-montre multijoueur (s). */
   dureeContreLaMontre: 300,
+  /** Durées proposées à l'hôte (s), et bornes acceptées par le serveur. */
+  dureesContreLaMontre: [180, 300, 600],
+  dureeSessionMin: 60,
+  dureeSessionMax: 900,
   /**
    * Tours d'une session de contre-la-montre solo.
    *

@@ -421,16 +421,27 @@ class Jeu {
         niveau: 'moyen',
       }));
 
+    const session = depart.mode === 'contre-la-montre';
+
     this.course = new Course({
-      circuit, ligne, participants, mode: 'course', tours: depart.tours,
+      circuit, ligne, participants,
+      mode: depart.mode ?? 'course',
+      tours: depart.tours,
+      session,
+      duree: depart.duree ?? null,
     });
     this.course.reseau = true;
+    this.toursAnnonces = 0;
 
     // Le serveur annonce une heure absolue. On la ramène dans notre horloge :
     // tout le monde voit donc « 3, 2, 1, partez » au même instant réel.
     const departLocal = depart.heureDepart - this.reseau.decalage;
     this.course.tempsAvantDepart = Math.max(0, (departLocal - Date.now()) / 1000);
     this.course.tempsAvantDepartInitial = this.course.tempsAvantDepart;
+
+    // Le décompte de la session part de l'heure de fin annoncée, ramenée dans
+    // notre horloge : tout le monde voit donc le même temps restant.
+    if (session) this.course.caleSession(depart.heureFin - this.reseau.decalage);
 
     this.tampon.vide();
     this.derniereEmission = 0;
@@ -471,6 +482,16 @@ class Jeu {
       if (!p.distant) continue;
       const echantillon = this.tampon.echantillon(p.id, t);
       if (echantillon) course.appliqueEtatDistant(p.id, echantillon);
+    }
+
+    // En session, chaque tour bouclé est annoncé : c'est ce qui alimente le
+    // classement en direct des meilleurs tours.
+    if (course.session) {
+      const tours = course.moi.etat.progression.tempsTours;
+      while (this.toursAnnonces < tours.length) {
+        this.reseau.annoncerTour(tours[this.toursAnnonces]);
+        this.toursAnnonces++;
+      }
     }
 
     // Notre arrivée est annoncée une seule fois : le chrono vient de notre
@@ -608,7 +629,9 @@ class Jeu {
     this.hud.maj(course, this.horloge, dt);
     if (course.reseau) this.chat?.afficheCourse(this.horloge);
 
-    if (course.phase === 'fini') this.termine();
+    // En réseau, c'est le serveur qui annonce les résultats : on se contente de
+    // figer la voiture à la fin d'une session.
+    if (course.phase === 'fini' && !course.reseau) this.termine();
   }
 
   traiteEvenements(evenements) {
@@ -774,6 +797,10 @@ class Jeu {
       }
     });
 
+    this.reseau.on('course:meilleurs', ({ lignes }) => {
+      this.hud.poseMeilleurs(lignes, this.reseau.socket?.id ?? null);
+    });
+
     this.reseau.on('course:premier', ({ pseudo, delai }) =>
       this.hud.message(`${pseudo} a franchi la ligne — ${delai} s pour finir`));
 
@@ -895,13 +922,14 @@ function ouvreMode(jeu, format, titre, grandPrix = false) {
 /** Résultats d'une course en réseau : le classement vient du serveur. */
 function afficheResultatsMulti(resultats, monId, catalogue = []) {
   const gp = resultats.grandPrix ?? null;
+  const session = resultats.mode === 'contre-la-montre';
   const nomCircuit = catalogue.find((c) => c.id === resultats.circuit)?.nom ?? '';
 
   document.getElementById('resultats-titre').textContent = gp
     ? `Manche ${gp.mancheCourue ?? gp.manche}/${gp.manches} — ${nomCircuit}`
-    : 'Résultats';
+    : session ? `${nomCircuit} — contre‑la‑montre` : 'Résultats';
   document.getElementById('resultats-gains').textContent = '';
-  entetesResultats('#', 'Pilote', 'Voiture', 'Temps');
+  entetesResultats('#', 'Pilote', 'Voiture', session ? 'Meilleur tour' : 'Temps');
 
   // Le championnat multijoueur est tenu par le serveur : on affiche son
   // tableau tel quel, sans recompter les points de notre côté.
@@ -924,8 +952,10 @@ function afficheResultatsMulti(resultats, monId, catalogue = []) {
   document.getElementById('bouton-rejouer').hidden = true;
 
   document.getElementById('resultats-corps').innerHTML = resultats.classement.map((c) => {
-    const temps = c.tempsTotal != null ? formateChrono(c.tempsTotal)
-      : c.rejete ? 'temps rejeté' : 'abandon';
+    const temps = session
+      ? (c.meilleurTour != null ? formateChrono(c.meilleurTour, 3) : 'aucun tour')
+      : c.tempsTotal != null ? formateChrono(c.tempsTotal)
+        : c.rejete ? 'temps rejeté' : 'abandon';
     const etiquette = c.bot && !c.pseudo.endsWith('(bot)') ? ' (bot)' : '';
     return `<tr class="${c.id === monId ? 'moi' : ''}">
       <td>${ordinal(c.place)}</td>
