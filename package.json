@@ -15,8 +15,9 @@
     "test:multi": "node test/multijoueur.mjs",
     "test:garage": "node test/garage.mjs",
     "test:gp": "node test/grandprix.mjs",
-    "test:navigateur": "node test/salon-navigateur.mjs && node test/garage-navigateur.mjs",
-    "test": "npm run verifier && npm run test:garage && npm run test:multi && npm run test:gp"
+    "test:clm": "node test/contre-la-montre.mjs",
+    "test:navigateur": "node test/salon-navigateur.mjs && node test/garage-navigateur.mjs && node test/contre-la-montre-navigateur.mjs",
+    "test": "npm run verifier && npm run test:garage && npm run test:multi && npm run test:gp && npm run test:clm"
   },
   "engines": {
     "node": ">=20"

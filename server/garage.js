@@ -102,7 +102,10 @@ export function brancheGarage(app) {
 
   app.post('/api/course/resultat', exigeAuth, async (req, res) => {
     const doc = req.joueur;
-    const resultat = appliqueCourse(doc, req.body ?? {});
+    // Les temps cibles des médailles ne viennent jamais du client : il pourrait
+    // les abaisser pour s'attribuer une médaille, donc un défi et ses crédits.
+    const annonce = { ...(req.body ?? {}), cibles: donneesCircuit(req.body?.circuit)?.medailles ?? null };
+    const resultat = appliqueCourse(doc, annonce);
     await doc.save();
     res.json(resultat);
   });
@@ -115,7 +118,7 @@ export function brancheGarage(app) {
   });
 
   app.post('/api/contre-la-montre', exigeAuth, async (req, res) => {
-    const { circuit, temps, voiture, niveau, fantome } = req.body ?? {};
+    const { circuit, temps, voiture, niveau, fantome, splits } = req.body ?? {};
     if (!ORDRE.includes(circuit)) return res.status(400).json({ erreur: 'Circuit inconnu' });
 
     // Les temps cibles viennent du fichier du circuit, calculés par
@@ -123,7 +126,9 @@ export function brancheGarage(app) {
     const cibles = donneesCircuit(circuit)?.medailles ?? null;
 
     const doc = req.joueur;
-    const resultat = appliqueTour(doc, { circuit, temps: Number(temps), voiture, niveau, cibles, fantome });
+    const resultat = appliqueTour(doc, {
+      circuit, temps: Number(temps), voiture, niveau, cibles, fantome, splits,
+    });
     await doc.save();
     res.json({ ...resultat, cibles });
   });
@@ -155,11 +160,23 @@ export function brancheGarage(app) {
     res.json({ circuit, cibles: donneesCircuit(circuit)?.medailles ?? null, lignes: lignes.slice(0, 10) });
   });
 
-  /** Fantôme du record personnel, pour s'affronter soi-même. */
+  /**
+   * Record personnel d'un circuit : temps, intermédiaires et fantôme.
+   *
+   * Le fantôme peut manquer (record établi avant l'enregistrement, ou tour trop
+   * long à encoder) ; le reste est alors renvoyé quand même, car les
+   * intermédiaires servent déjà de référence au HUD.
+   */
   app.get('/api/fantome/:circuit', exigeAuth, (req, res) => {
     const record = req.joueur.records?.[req.params.circuit];
-    if (!record?.fantome) return res.status(404).json({ erreur: 'Aucun fantôme enregistré' });
-    res.json({ temps: record.temps, voiture: record.voiture, fantome: record.fantome });
+    if (!record?.temps) return res.status(404).json({ erreur: 'Aucun record enregistré' });
+    res.json({
+      temps: record.temps,
+      voiture: record.voiture,
+      niveau: record.niveau ?? 0,
+      splits: record.splits ?? null,
+      fantome: record.fantome ?? null,
+    });
   });
 
   /** Catalogue du garage : ce que le client affiche, prix compris. */

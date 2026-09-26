@@ -330,6 +330,19 @@ html, body {
 }
 .liste-manches small { color: var(--texte-doux); margin-left: auto; }
 
+/* Paliers de médailles du contre-la-montre. */
+.paliers-medailles { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.paliers-medailles .palier {
+  padding: 5px 10px; border-radius: 999px;
+  border: 1px solid var(--bord); color: var(--texte-doux);
+  font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.paliers-medailles .palier.atteint {
+  border-color: var(--accent); color: var(--texte);
+  background: rgba(52, 224, 255, 0.14);
+}
+.note.record { color: var(--accent); font-weight: 600; }
+
 .actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .credits-joueur { font-size: 15px; font-weight: 600; }
 .credits-joueur .pastille { color: var(--accent-chaud); }

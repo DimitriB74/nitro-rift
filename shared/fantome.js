@@ -37,12 +37,14 @@ export class Enregistreur {
     this.pas = 1 / hz;
     this.valeurs = [];
     this.prochain = 0;
+    this.precedent = null;   // { t, brut[] } de l'appel précédent
   }
 
   /** Repart de zéro : appelé au début de chaque tour. */
   reinitialise() {
     this.valeurs.length = 0;
     this.prochain = 0;
+    this.precedent = null;
   }
 
   /**
@@ -50,16 +52,31 @@ export class Enregistreur {
    * @param {{pos:object, avant:object, haut:object}} etat
    */
   echantillonne(tempsTour, etat) {
-    // Tant que le temps a sauté de plusieurs pas (image longue), on comble :
-    // sans cela la relecture serait plus rapide que l'original.
+    const brut = [
+      etat.pos.x * ECHELLE_POS, etat.pos.y * ECHELLE_POS, etat.pos.z * ECHELLE_POS,
+      etat.avant.x * ECHELLE_VEC, etat.avant.y * ECHELLE_VEC, etat.avant.z * ECHELLE_VEC,
+      etat.haut.x * ECHELLE_VEC, etat.haut.y * ECHELLE_VEC, etat.haut.z * ECHELLE_VEC,
+    ];
+    const avant = this.precedent;
+
+    // Les images ne tombent pas sur les instants d'échantillonnage : on
+    // interpole entre l'image précédente et celle-ci. Sans cela, un échantillon
+    // serait posé jusqu'à une image trop tard — un demi-mètre à 110 km/h, soit
+    // un décalage visible quand on se bat contre son propre fantôme. La boucle
+    // comble aussi les images longues, qui sinon accéléreraient la relecture.
     while (tempsTour >= this.prochain) {
-      this.valeurs.push(
-        borne(etat.pos.x * ECHELLE_POS), borne(etat.pos.y * ECHELLE_POS), borne(etat.pos.z * ECHELLE_POS),
-        borne(etat.avant.x * ECHELLE_VEC), borne(etat.avant.y * ECHELLE_VEC), borne(etat.avant.z * ECHELLE_VEC),
-        borne(etat.haut.x * ECHELLE_VEC), borne(etat.haut.y * ECHELLE_VEC), borne(etat.haut.z * ECHELLE_VEC),
-      );
+      if (!avant || tempsTour <= avant.t) {
+        for (const v of brut) this.valeurs.push(borne(v));
+      } else {
+        const f = (this.prochain - avant.t) / (tempsTour - avant.t);
+        for (let k = 0; k < PAR_ECHANTILLON; k++) {
+          this.valeurs.push(borne(avant.brut[k] + (brut[k] - avant.brut[k]) * f));
+        }
+      }
       this.prochain += this.pas;
     }
+
+    this.precedent = { t: tempsTour, brut };
   }
 
   get nombreEchantillons() {
@@ -151,6 +168,10 @@ export class Fantome {
   /**
    * Pose à un instant du tour. Avant le début et après la fin, on reste sur le
    * premier ou le dernier échantillon : un fantôme ne disparaît pas, il attend.
+   *
+   * ATTENTION : l'objet rendu est réutilisé d'un appel à l'autre, pour ne pas
+   * allouer soixante fois par seconde. Il faut le lire tout de suite, ou en
+   * copier les valeurs ; deux appels ne donnent pas deux objets distincts.
    *
    * @param {number} temps  secondes depuis le début du tour
    */

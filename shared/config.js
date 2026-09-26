@@ -142,6 +142,14 @@ export const COURSE = {
   grandPrix: ['canyon', 'ville', 'stade', 'montagne'],
   /** Durée d'une session de contre-la-montre multijoueur (s). */
   dureeContreLaMontre: 300,
+  /**
+   * Tours d'une session de contre-la-montre solo.
+   *
+   * Quatre, et non un : les temps de référence des médailles sont des tours
+   * lancés (le script de calibration ignore le premier tour, départ arrêté).
+   * Avec un seul tour, la médaille de platine serait inatteignable.
+   */
+  toursContreLaMontre: 4,
   /** Écartement de la grille de départ. */
   grille: { pasLongitudinal: 8, decalageLateral: 3.4 }
 };

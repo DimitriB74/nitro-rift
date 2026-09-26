@@ -16,6 +16,7 @@ import {
   multiplicateurAdversite, DEFIS_PAR_ID,
 } from '../shared/economy.js';
 import { COURSE } from '../shared/config.js';
+import { TAILLE_MAX } from '../shared/fantome.js';
 import { marqueModifie, profilPublic } from './db.js';
 
 const entier = (v, min, max) => {
@@ -123,7 +124,7 @@ export function appliqueGrandPrix(doc, { position, adversaires = [] }) {
  * directement donne aussi les inférieures pas encore acquises — sinon un
  * joueur doué serait puni d'avoir été bon du premier coup.
  */
-export function appliqueTour(doc, { circuit, temps, voiture, niveau, cibles, fantome }) {
+export function appliqueTour(doc, { circuit, temps, voiture, niveau, cibles, fantome, splits }) {
   const resultat = { gains: 0, lignes: [], medaille: null, record: false };
   if (!Number.isFinite(temps) || temps <= 0) return { ...resultat, profil: profilPublic(doc) };
 
@@ -155,7 +156,12 @@ export function appliqueTour(doc, { circuit, temps, voiture, niveau, cibles, fan
         temps,
         voiture: voiture ?? doc.voitureActive,
         niveau: niveau ?? 0,
-        fantome: typeof fantome === 'string' ? fantome.slice(0, 60000) : null,
+        fantome: typeof fantome === 'string' ? fantome.slice(0, TAILLE_MAX) : null,
+        // Intermédiaires du tour record : ils servent de référence au HUD à la
+        // prochaine session. Bornés, car ils viennent du client.
+        splits: Array.isArray(splits)
+          ? splits.slice(0, 16).map((t) => (Number.isFinite(Number(t)) ? +Number(t).toFixed(3) : null))
+          : null,
         date: new Date(),
       },
     };

@@ -6,7 +6,9 @@ import * as THREE from 'three';
 
 import { GAME_NAME, PHYS, QUALITES, LIBELLES_TOUCHES, CAMERA, COURSE, RESEAU } from '@shared/config.js';
 import { instantane, progressionNormalisee } from '@shared/physics.js';
-import { VOITURES, IDS_VOITURES, PEINTURE_DEPART, niveauxVides } from '@shared/cars.js';
+import { Enregistreur, decodeFantome } from '@shared/fantome.js';
+import { medaillePourTemps, ORDRE_MEDAILLES } from '@shared/economy.js';
+import { VOITURES, IDS_VOITURES, PEINTURE_DEPART, niveauxVides, niveauMoyen } from '@shared/cars.js';
 import { NIVEAUX, IDS_NIVEAUX, tirePseudos, choisitVoiture, ameliorationsBot } from '@shared/bots.js';
 import {
   creerGrandPrix, enregistreCourse, classementGeneral, circuitCourant,
@@ -19,7 +21,7 @@ import { catalogue, prepare } from './game/circuits.js';
 import { Course, moyenneHumains } from './game/course.js';
 import { creerRendu, creerScene, redimensionne, suitOmbres } from './render/scene.js';
 import { construitPiste, detruitPiste } from './render/piste.js';
-import { creerVoiture, chargeModele, orienteVoiture, animeRoues, ajusteTransparence } from './render/voiture.js';
+import { creerVoiture, chargeModele, orienteVoiture, animeRoues, ajusteTransparence, rendFantomatique } from './render/voiture.js';
 import { CameraPoursuite } from './render/camera.js';
 import { Hud, formateChrono, echappe, nomVoiture } from './ui/hud.js';
 import { demandeConnexion, majBandeau } from './ui/auth.js';
@@ -86,6 +88,17 @@ class Jeu {
 
     /** Championnat en cours, ou `null` hors Grand Prix. */
     this.gp = null;
+
+    // --- Contre-la-montre ---------------------------------------------------
+    /** Trajectoire relue du record personnel. */
+    this.fantome = null;
+    this.objetFantome = null;
+    /** Record personnel du circuit chargé : temps, voiture, intermédiaires. */
+    this.record = null;
+    /** Enregistreur du tour en cours. */
+    this.enregistreur = null;
+    /** Meilleur tour de la session : temps, intermédiaires et fantôme encodé. */
+    this.sessionMeilleur = null;
 
     window.addEventListener('resize', () => this.redimensionne());
     this.redimensionne();
@@ -192,14 +205,22 @@ class Jeu {
     // voudrait rien dire.
     const participants = participantsImposes ?? this.construitParticipantsSolo(circuit);
 
+    const contreLaMontre = this.config.mode === 'contre-la-montre';
+
     this.course = new Course({
       circuit, ligne, participants,
       mode: this.config.mode,
-      tours: this.config.mode === 'contre-la-montre' ? 1 : circuit.tours
+      tours: contreLaMontre ? COURSE.toursContreLaMontre : circuit.tours
     });
     this.course.tempsAvantDepartInitial = this.course.tempsAvantDepart;
 
     this.construitMobiles();
+
+    // Le fantôme du record arrive après la scène : il lui faut la voiture du
+    // record, et son chargement ne doit pas retarder l'affichage du circuit.
+    if (contreLaMontre) await this.prepareContreLaMontre(circuit);
+    else this.oublieFantome();
+
     this.hud.prepare(this.course);
     this.cameraPoursuite.replace(this.course.moi.etat);
 
@@ -242,6 +263,85 @@ class Jeu {
       });
     }
     return participants;
+  }
+
+  // -------------------------------------------------------------------------
+  // Contre-la-montre
+  // -------------------------------------------------------------------------
+
+  /**
+   * Prépare une session de contre-la-montre : enregistreur du tour en cours et
+   * fantôme du record personnel.
+   *
+   * Sans compte, sans record ou sans fantôme enregistré, on roule simplement
+   * sans adversaire — le mode reste jouable.
+   */
+  async prepareContreLaMontre(circuit) {
+    this.oublieFantome();
+    this.enregistreur = new Enregistreur();
+    this.sessionMeilleur = null;
+    this.meilleurTourSession.delete(circuit.id);
+    this.meilleursSplits.delete(circuit.id);
+    if (!this.profil) return;
+
+    try {
+      const reponse = await fetch(`/api/fantome/${circuit.id}`, {
+        headers: { authorization: `Bearer ${jetonActuel()}` },
+      });
+      if (!reponse.ok) return;                 // pas encore de record : normal
+      const data = await reponse.json();
+
+      this.record = { temps: data.temps, voiture: data.voiture, niveau: data.niveau ?? 0 };
+
+      // Les intermédiaires du record servent de référence au HUD dès le premier
+      // tour : c'est ce qui rend le contre-la-montre lisible.
+      if (Array.isArray(data.splits) && data.splits.length) {
+        this.meilleursSplits.set(circuit.id, data.splits.slice());
+        this.meilleurTourSession.set(circuit.id, data.temps);
+      }
+
+      this.fantome = decodeFantome(data.fantome);
+      if (!this.fantome) return;
+
+      const voiture = data.voiture ?? this.config.voiture;
+      this.objetFantome = creerVoiture(voiture, 'blanc', this.modeles[voiture]);
+      rendFantomatique(this.objetFantome);
+      this.scene.add(this.objetFantome);
+    } catch {
+      // Réseau indisponible : on roule sans fantôme plutôt que d'échouer.
+    }
+  }
+
+  oublieFantome() {
+    if (this.objetFantome) {
+      this.scene?.remove(this.objetFantome);
+      this.objetFantome = null;
+    }
+    this.fantome = null;
+    this.record = null;
+    this.enregistreur = null;
+  }
+
+  /** Temps écoulé dans le tour courant du joueur. */
+  tempsDansLeTour() {
+    const progression = this.course.moi.etat.progression;
+    const debut = progression.tempsTours.reduce((a, b) => a + b, 0);
+    return this.course.moi.etat.temps - debut;
+  }
+
+  /** Avance le fantôme et enregistre notre trajectoire, une fois par image. */
+  majContreLaMontre() {
+    if (this.course.phase !== 'course') return;
+    const t = this.tempsDansLeTour();
+
+    if (this.enregistreur) this.enregistreur.echantillonne(t, this.course.moi.etat);
+
+    if (this.fantome && this.objetFantome) {
+      orienteVoiture(this.objetFantome, this.fantome.poseA(t), PHYS.hauteurCaisse);
+      // Passé la fin du tour record, le fantôme s'efface : le garder immobile
+      // au bord de la piste ferait croire à un bug.
+      this.objetFantome.visible = t <= this.fantome.duree + 0.5;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -480,6 +580,8 @@ class Jeu {
       if (p !== course.moi) ajusteTransparence(objet, objet.position.distanceTo(posCamera));
     }
 
+    if (course.mode === 'contre-la-montre') this.majContreLaMontre();
+
     this.cameraPoursuite.maj(course.moi.etat, dt);
     if (this.soleil) suitOmbres(this.soleil, this.cameraPoursuite.camera.position);
 
@@ -558,6 +660,19 @@ class Jeu {
         this.hud.message(`Meilleur tour ! ${formateChrono(dernier, 3)}`, 'record', 2.2, this.horloge);
       }
     }
+
+    // Contre-la-montre : on retient le meilleur tour de la session et son
+    // fantôme, même s'il ne bat pas le record — c'est celui qu'on enverra.
+    if (this.course.mode === 'contre-la-montre' &&
+        (!this.sessionMeilleur || dernier < this.sessionMeilleur.temps)) {
+      this.sessionMeilleur = {
+        temps: dernier,
+        splits: [...(this.splitsEnCours ?? [])],
+        fantome: this.enregistreur?.encode() ?? null,
+      };
+    }
+    this.enregistreur?.reinitialise();
+
     this.splitsEnCours = [];
 
     const restants = this.course.tours - ev.tour;
@@ -747,6 +862,7 @@ function afficheResultatsMulti(resultats, monId, catalogue = []) {
     ? `Manche ${gp.mancheCourue ?? gp.manche}/${gp.manches} — ${nomCircuit}`
     : 'Résultats';
   document.getElementById('resultats-gains').textContent = '';
+  entetesResultats('#', 'Pilote', 'Voiture', 'Temps');
 
   // Le championnat multijoueur est tenu par le serveur : on affiche son
   // tableau tel quel, sans recompter les points de notre côté.
@@ -836,6 +952,15 @@ function ouvreConfig(jeu, mode) {
   document.getElementById('panneau-grand-prix').hidden = !gp;
   document.querySelector('[data-action="lancer"]').textContent =
     gp ? 'Lancer le championnat' : 'Lancer la course';
+
+  const note = document.getElementById('config-note');
+  if (note) {
+    note.textContent = mode === 'contre-la-montre'
+      ? `${COURSE.toursContreLaMontre} tours seul en piste : le premier part à l'arrêt, ` +
+        'les suivants sont lancés. Le meilleur tour compte. Ton record personnel ' +
+        'roule avec toi sous forme de fantôme translucide.'
+      : gp ? 'Les mêmes adversaires disputent les quatre manches.' : '';
+  }
 
   if (gp) construitListeManches(jeu);
   construitChoixCircuits(jeu);
@@ -984,6 +1109,11 @@ function construitParametres(jeu) {
 
 function afficheResultats(jeu) {
   const course = jeu.course;
+
+  // Le contre-la-montre n'a pas de classement : ce qui compte est le tour, les
+  // intermédiaires et la médaille. Il a donc son propre écran.
+  if (course.mode === 'contre-la-montre') return afficheResultatsTour(jeu);
+
   const resultats = course.resultats();
 
   // Le championnat encaisse les points avant l'affichage : le tableau général
@@ -998,6 +1128,7 @@ function afficheResultats(jeu) {
   document.getElementById('resultats-titre').textContent = gp
     ? `Manche ${Math.min(gp.index, gp.circuits.length)}/${gp.circuits.length} — ${course.circuit.nom}`
     : `${course.circuit.nom} — résultats`;
+  entetesResultats('#', 'Pilote', 'Voiture', 'Temps', 'Meilleur tour');
 
   const corps = document.getElementById('resultats-corps');
   corps.innerHTML = resultats.map((r) => {
@@ -1181,6 +1312,131 @@ async function envoieResultat(jeu, course, resultats, moi) {
         : '');
   } catch (e) {
     bloc.innerHTML = `<p class="erreur">Gains non enregistrés : ${echappe(e.message)}</p>`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Contre-la-montre
+// ---------------------------------------------------------------------------
+
+/**
+ * Résultats d'une session de contre-la-montre : les tours, le meilleur, la
+ * comparaison au record et la médaille. Le serveur reste seul juge des
+ * médailles et des crédits : on lui envoie le tour et il répond.
+ */
+function afficheResultatsTour(jeu) {
+  const course = jeu.course;
+  const tours = course.moi.etat.progression.tempsTours;
+  const meilleur = jeu.sessionMeilleur?.temps ?? (tours.length ? Math.min(...tours) : null);
+  const record = jeu.record;
+
+  document.getElementById('resultats-titre').textContent =
+    `${course.circuit.nom} — contre‑la‑montre`;
+  entetesResultats('Tour', 'Départ', 'Voiture', 'Temps', 'Écart');
+
+  // Tableau des tours : le premier part à l'arrêt, on le signale.
+  document.getElementById('resultats-corps').innerHTML = tours.map((t, i) => {
+    const ecart = meilleur != null && t > meilleur ? `+${(t - meilleur).toFixed(3)} s` : '—';
+    return `<tr class="${t === meilleur ? 'moi' : ''}">` +
+      `<td>${i + 1}</td>` +
+      `<td>${i === 0 ? 'Départ arrêté' : 'Lancé'}</td>` +
+      `<td>${echappe(nomVoiture(course.moi.voiture))}</td>` +
+      `<td class="temps">${formateChrono(t, 3)}</td>` +
+      `<td class="temps">${ecart}</td></tr>`;
+  }).join('') || '<tr><td colspan="5">Aucun tour complet.</td></tr>';
+
+  const cibles = jeu.catalogue.find((c) => c.id === course.circuit.id)?.medailles ?? null;
+  const medaille = meilleur != null ? medaillePourTemps(meilleur, cibles) : null;
+
+  const bloc = document.getElementById('resultats-gains');
+  bloc.innerHTML =
+    '<h3>Votre session</h3>' +
+    ligneStat('Meilleur tour', meilleur != null ? formateChrono(meilleur, 3) : '—') +
+    (record
+      ? ligneStat('Record personnel', `${formateChrono(record.temps, 3)} ` +
+        `<small style="opacity:.6">${ecartLisible(meilleur, record.temps)}</small>`)
+      : ligneStat('Record personnel', 'aucun pour l’instant')) +
+    (cibles ? ligneStat('Objectif platine', formateChrono(cibles.platine, 3)) : '') +
+    ligneStat('Médaille de ce tour', medaille ? MEDAILLES_LISIBLES[medaille] : 'aucune') +
+    (cibles ? `<div class="paliers-medailles">${ORDRE_MEDAILLES.slice().reverse().map((m) =>
+      `<span class="palier ${meilleur != null && meilleur <= cibles[m] ? 'atteint' : ''}">` +
+      `${MEDAILLES_LISIBLES[m]} ${formateChrono(cibles[m], 3)}</span>`).join('')}</div>` : '') +
+    '<div id="resultats-credits"></div>';
+
+  document.getElementById('resultats-gp').hidden = true;
+  document.getElementById('bouton-gp-suivant').hidden = true;
+  const rejouer = document.getElementById('bouton-rejouer');
+  rejouer.hidden = false;
+  rejouer.textContent = 'Recommencer';
+
+  envoieTour(jeu, course, meilleur);
+}
+
+/** En-têtes du tableau de résultats : ils changent selon le mode. */
+function entetesResultats(...titres) {
+  const ligne = document.getElementById('resultats-entetes');
+  if (ligne) ligne.innerHTML = titres.map((t) => `<th>${t}</th>`).join('');
+}
+
+const MEDAILLES_LISIBLES = {
+  platine: '◆ Platine', or: '● Or', argent: '● Argent', bronze: '● Bronze',
+};
+
+/** « −0,412 s » ou « +1,230 s » par rapport à une référence. */
+function ecartLisible(temps, reference) {
+  if (temps == null || reference == null) return '';
+  const d = temps - reference;
+  return `${d <= 0 ? '−' : '+'}${Math.abs(d).toFixed(3)} s`;
+}
+
+/** Envoie le meilleur tour au serveur, qui décide médaille, record et crédits. */
+async function envoieTour(jeu, course, meilleur) {
+  const bloc = document.getElementById('resultats-credits');
+  if (!bloc) return;
+
+  if (!jeu.profil) {
+    bloc.innerHTML = '<p class="note">Mode invité : ni record ni médaille ne sont ' +
+      'enregistrés. Crée un compte pour garder tes temps.</p>';
+    return;
+  }
+  if (meilleur == null) {
+    bloc.innerHTML = '<p class="note">Aucun tour complet : rien à enregistrer.</p>';
+    return;
+  }
+
+  bloc.innerHTML = '<p class="note">Enregistrement du temps…</p>';
+
+  const niveaux = jeu.profil.ameliorations?.[course.moi.voiture] ?? {};
+
+  try {
+    const reponse = await fetch('/api/contre-la-montre', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${jetonActuel()}` },
+      body: JSON.stringify({
+        circuit: course.circuit.id,
+        temps: meilleur,
+        voiture: course.moi.voiture,
+        niveau: Math.round(niveauMoyen(niveaux)),
+        splits: jeu.sessionMeilleur?.splits ?? null,
+        fantome: jeu.sessionMeilleur?.fantome ?? null,
+      }),
+    });
+    const data = await reponse.json();
+    if (!reponse.ok) throw new Error(data.erreur ?? 'Erreur serveur');
+
+    jeu.profil = data.profil;
+    majBandeau(data.profil);
+
+    const lignes = (data.lignes ?? [])
+      .map((l) => ligneStat(l.libelle, `+${l.credits} ¤`)).join('');
+
+    bloc.innerHTML =
+      (data.record ? '<p class="note record">Record personnel battu — le fantôme est mis à jour.</p>' : '') +
+      (data.medaille ? `<p class="note record">Nouvelle médaille : ${MEDAILLES_LISIBLES[data.medaille]}</p>` : '') +
+      (lignes ? `<h3 style="margin-top:14px">Gains</h3>${lignes}` +
+        ligneStat('<b>Total</b>', `<b>+${data.gains} ¤</b>`) : '');
+  } catch (e) {
+    bloc.innerHTML = `<p class="erreur">Temps non enregistré : ${echappe(e.message)}</p>`;
   }
 }
 

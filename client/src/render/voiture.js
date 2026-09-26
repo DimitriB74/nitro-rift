@@ -324,6 +324,26 @@ export function ajusteTransparence(groupe, distance) {
   }
 }
 
+/**
+ * Rend une voiture fantomatique : translucide, sans ombre, et sans écriture de
+ * profondeur pour qu'on voie la piste à travers. On ne touche qu'aux copies de
+ * matériaux de ce groupe, jamais aux matériaux partagés.
+ */
+export function rendFantomatique(groupe, opacite = 0.35) {
+  groupe.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = false;
+    o.receiveShadow = false;
+  });
+  for (const m of groupe.userData.materiaux ?? []) {
+    m.transparent = true;
+    m.opacity = opacite;
+    m.depthWrite = false;
+    m.emissive?.setRGB(0.05, 0.35, 0.45);
+  }
+  groupe.userData.fantome = true;
+}
+
 export function detruitVoiture(groupe) {
   groupe.traverse((o) => {
     if (o.isMesh && o.material && !Object.values(geoCache ?? {}).includes(o.geometry)) {
