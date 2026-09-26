@@ -23,6 +23,7 @@ import { deconnexion, reprendSession } from './net/api.js';
 import { Reseau, TamponDistant } from './net/socket.js';
 import { EcranSalon } from './ui/salon.js';
 import { Garage, Classements } from './ui/garage.js';
+import { Audio } from './audio/audio.js';
 import { jetonActuel } from './net/api.js';
 
 // ---------------------------------------------------------------------------
@@ -47,6 +48,8 @@ class Jeu {
     this.reseau = null;
     this.salonUi = null;
     this.tampon = new TamponDistant();
+    this.audio = new Audio(reglages.volumes);
+    this.dernierBip = -1;
     this.derniereEmission = 0;
     this.arriveeAnnoncee = false;
     this.rendu = creerRendu(this.canvas);
@@ -117,6 +120,16 @@ class Jeu {
 
     // Reprise de session si un jeton valide traîne en localStorage, sinon on
     // demande de se connecter. Le mode invité rend null et reste jouable.
+    // Les navigateurs refusent de démarrer le son sans geste de l'utilisateur :
+    // on s'accroche au premier clic, quel qu'il soit.
+    const eveille = () => {
+      this.audio.demarre();
+      this.audio.reprend();
+      this.audio.joueMusique('menu');
+      document.removeEventListener('pointerdown', eveille);
+    };
+    document.addEventListener('pointerdown', eveille);
+
     this.profil = await reprendSession();
     if (!this.profil) this.profil = await demandeConnexion(montre);
 
@@ -204,6 +217,8 @@ class Jeu {
     this.enPause = false;
     document.getElementById('voile-pause').hidden = true;
     this.clavier.videImpulsions();
+    this.dernierBip = -1;
+    this.audio.joueMusique(circuit.decor ?? 'desert');
     montre('ecran-course');
   }
 
@@ -261,6 +276,8 @@ class Jeu {
     this.enPause = false;
     document.getElementById('voile-pause').hidden = true;
     this.clavier.videImpulsions();
+    this.dernierBip = -1;
+    this.audio.joueMusique(circuit.decor ?? 'desert');
     montre('ecran-course');
   }
 
@@ -297,6 +314,34 @@ class Jeu {
         tempsTotal: course.moi.etat.progression.tempsTotal,
         tempsTours: course.moi.etat.progression.tempsTours.slice(),
       });
+    }
+  }
+
+  /** Moteur, vent et bips du compte à rebours. */
+  majAudio() {
+    const course = this.course;
+    if (!this.audio.pret || !course) return;
+
+    if (course.phase === 'compte') {
+      // Un bip par seconde pendant le décompte, le dernier plus aigu.
+      const restant = Math.ceil(course.tempsAvantDepart);
+      if (restant !== this.dernierBip && restant >= 0 && restant <= 3) {
+        this.dernierBip = restant;
+        this.audio.bip(restant === 0);
+      }
+      return;
+    }
+
+    const etat = course.moi.etat;
+    const vitesse01 = Math.min(1, Math.abs(etat.vitesseScalaire) / (etat.params?.vitesseMax ?? 80));
+    this.audio.demarreMoteur();
+    this.audio.majMoteur(vitesse01, course.moi.derniereEntree?.accel ?? 0, etat.nitro?.actif ?? false);
+    this.audio.majVent(vitesse01);
+
+    // Crissement tant que la voiture dérape.
+    if (etat.derapage?.actif) {
+      this.tempsCrissement = (this.tempsCrissement ?? 0) + 1;
+      if (this.tempsCrissement % 12 === 0) this.audio.crissement(Math.min(1, vitesse01));
     }
   }
 
@@ -342,6 +387,7 @@ class Jeu {
     if (this.course && ecrans['ecran-course'].classList.contains('actif')) {
       this.majCourse(dt);
       this.majReseau();
+      this.majAudio(dt);
     }
 
     if (this.scene) this.rendu.render(this.scene, this.cameraPoursuite.camera);
@@ -394,24 +440,29 @@ class Jeu {
 
       switch (ev.type) {
         case 'derapage-boost':
+          this.audio.boostDerapage(ev.palier ?? 1);
           this.hud.message(
             ev.palier === 3 ? 'Dérapage parfait !' : 'Dérapage !',
             'style', 1.2, this.horloge
           );
           break;
         case 'atterrissage':
+          this.audio.atterrissage(Math.min(1, ev.force));
           this.cameraPoursuite.secoue(Math.min(1, ev.force));
           break;
         case 'looping':
+          this.audio.note({ freq: 520, freqFin: 1040, duree: 0.35, gain: 0.16, type: 'triangle' });
           this.hud.message('Looping !', 'style', 1.2, this.horloge);
           break;
         case 'checkpoint':
+          this.audio.checkpoint(ev.avance === true);
           this.noteIntermediaire(ev);
           break;
         case 'tour':
           this.noteTour(ev);
           break;
         case 'reapparition':
+          this.audio.souffle({ duree: 0.3, coupure: 700, gain: 0.18 });
           if (ev.cause !== 'manuel') this.hud.message('Retour au checkpoint', '', 1.2, this.horloge);
           break;
         case 'premier-arrive':
@@ -465,12 +516,18 @@ class Jeu {
 
   termine() {
     afficheResultats(this);
+    this.audio?.arreteMoteur();
+    this.audio?.arreteVent();
+    this.audio?.joueMusique('victoire');
     montre('ecran-resultats');
   }
 
   quitteCourse() {
     if (this.course?.reseau) this.reseau?.quitter();
     this.course = null;
+    this.audio.arreteMoteur();
+    this.audio.arreteVent();
+    this.audio.joueMusique('menu');
     montre('ecran-menu');
   }
 
@@ -538,8 +595,6 @@ class Jeu {
 
 function construitInterface(jeu) {
   // --- Menu principal ------------------------------------------------------
-  document.getElementById('note-menu').textContent =
-    'Étapes 1 à 5 : conduite, physique 3D, checkpoints, bots et course solo complète.';
 
   brancheActions(document, {
     'grand-prix': () => ouvreMode(jeu, 'course', 'Grand Prix'),
@@ -643,6 +698,35 @@ function afficheResultatsMulti(resultats, monId) {
   montre('ecran-resultats');
 }
 
+/** Un curseur par catégorie sonore, appliqué en direct. */
+function construitVolumes(jeu) {
+  const bloc = document.getElementById('reglages-volumes');
+  if (!bloc) return;
+
+  const libelles = {
+    general: 'Général', musique: 'Musique', moteur: 'Moteur',
+    effets: 'Effets', interface: 'Interface',
+  };
+
+  bloc.innerHTML = Object.entries(libelles).map(([cle, nom]) => `
+    <div class="ligne-reglage">
+      <label for="vol-${cle}">${nom}</label>
+      <input type="range" id="vol-${cle}" min="0" max="100" value="${reglages.volumes[cle] ?? 70}">
+      <span class="valeur" id="vol-${cle}-valeur">${reglages.volumes[cle] ?? 70}</span>
+    </div>`).join('');
+
+  for (const cle of Object.keys(libelles)) {
+    const curseur = document.getElementById(`vol-${cle}`);
+    curseur.oninput = () => {
+      reglages.volumes[cle] = Number(curseur.value);
+      document.getElementById(`vol-${cle}-valeur`).textContent = curseur.value;
+      // Appliqué immédiatement : on règle au son, pas à l'aveugle.
+      jeu.audio.appliqueVolumes(reglages.volumes);
+      enregistre();
+    };
+  }
+}
+
 function brancheActions(racine, actions) {
   racine.addEventListener('click', (e) => {
     const bouton = e.target.closest('[data-action]');
@@ -729,6 +813,8 @@ function construitReglagesBots(jeu) {
 }
 
 function construitParametres(jeu) {
+  construitVolumes(jeu);
+
   // Qualité graphique
   const qualite = document.getElementById('choix-qualite');
   qualite.innerHTML = '';

@@ -1,134 +1,222 @@
 # NITRO RIFT
 
-Jeu de course arcade en 3D, jouable dans Chrome, façon TrackMania : circuits avec
-loopings, virages relevés, tire-bouchons et murs verticaux, dérapages chargés,
-nitro, bots et salons privés entre amis.
+Jeu de course arcade 3D **jouable dans le navigateur**, en solo contre des bots
+ou en ligne avec tes amis dans des salons privés. Circuits avec loopings,
+virages relevés, tire-bouchons et murs verticaux.
 
-Le nom du jeu est centralisé dans la constante `GAME_NAME`
-([`shared/config.js`](shared/config.js)) : le changer là le change partout.
-
-> **État d'avancement** — étapes 1 à 5 livrées : structure du projet, conduite et
-> caméra, physique 3D complète, checkpoints / tours / chrono / HUD / dérapage /
-> nitro, bots à trois niveaux et course solo complète avec résultats. Les quatre
-> circuits et le circuit d'essai sont déjà jouables.
+Interface entièrement en français. Prévu pour tourner à 60 images/s sur une
+carte graphique intégrée.
 
 ---
 
-## Lancer le jeu en local
-
-Il faut **Node.js 20 ou plus**.
+## Essayer tout de suite, en local
 
 ```bash
 npm install
-npm run dev
+npm run dev        # serveur + Vite, rechargement à chaud
 ```
 
-Puis ouvrez **http://localhost:5173**.
+Puis ouvre **http://localhost:5173**.
 
-`npm run dev` démarre deux choses en parallèle : le serveur Express
-(port 3000, qui sert les circuits et l'API) et Vite (port 5173, qui sert le
-client avec rechargement à chaud). C'est l'adresse **5173** qu'il faut ouvrir.
+Sans base de données configurée, le serveur démarre en **mode mémoire** : tu
+peux créer un compte et jouer immédiatement, mais la progression disparaît au
+redémarrage. C'est fait pour : aucun compte MongoDB n'est nécessaire pour
+développer.
 
-Pour tester la version de production telle qu'elle tournera sur Render :
+Pour tester la version de production telle qu'elle sera en ligne :
 
 ```bash
-npm run build
-npm start
+npm run build && npm start   # http://localhost:3000
 ```
 
-Puis ouvrez **http://localhost:3000**.
+---
 
-### Scripts disponibles
+## Commandes
 
-| Commande | Effet |
+| Touche | Action |
 |---|---|
-| `npm run dev` | Serveur + client en développement |
-| `npm run build` | Construit le client dans `/dist` |
-| `npm start` | Démarre le serveur (sert `/dist`) |
-| `npm run tracks` | Régénère les circuits JSON depuis leur description |
-| `npm run calibrate` | Calcule les temps des médailles (étape 10) |
+| `Z` `Q` `S` `D` (AZERTY) ou `W` `A` `S` `D` | accélérer, freiner, tourner |
+| Flèches | équivalent |
+| `Espace` | dérapage |
+| `Maj` | nitro |
+| `Entrée` | retour au dernier checkpoint |
+| `Retour arrière` | recommencer (solo et contre-la-montre) |
+| `Échap` | pause / menu |
+
+Les touches sont détectées par **position physique** : ZQSD sur AZERTY et WASD
+sur QWERTY fonctionnent sans rien régler. Tout est reconfigurable dans les
+paramètres.
+
+**Le geste qui change tout** : maintiens `Espace` en tournant pour charger un
+dérapage. Trois paliers — bleu, orange, violet — et relâcher donne un
+mini-boost proportionnel. Toucher un mur annule la charge.
 
 ---
 
-## Contrôles
+## Scripts
 
-Les touches sont détectées par leur **position physique** : **ZQSD** en AZERTY et
-**WASD** en QWERTY fonctionnent sans rien configurer. Tout est reconfigurable
-dans les paramètres.
-
-| Action | Touche |
+| Commande | Rôle |
 |---|---|
-| Accélérer | `Z` / `W` ou `↑` |
-| Freiner, marche arrière | `S` ou `↓` |
-| Tourner | `Q` `D` / `A` `D` ou `←` `→` |
-| Dérapage | `Espace` |
-| Nitro | `Maj` |
-| Retour au dernier checkpoint | `Entrée` |
-| Recommencer (solo) | `Retour arrière` |
-| Pause | `Échap` |
+| `npm run dev` | serveur + client en développement |
+| `npm run build` | construit le client dans `/dist` |
+| `npm start` | serveur de production (sert `/dist`) |
+| `npm run verifier` | 24 contrôles sans affichage : circuits, bots, voitures |
+| `npm run test:multi` | 22 contrôles du multijoueur avec de vrais clients réseau |
+| `npm run test:garage` | 18 contrôles de l'économie et du garage |
+| `npm run test:navigateur` | salon et garage dans un vrai Chromium |
+| `npm run calibrate` | recalcule les temps de médaille des circuits |
+| `npm run tracks` | régénère les circuits depuis les scripts de tracé |
 
 ---
 
-## Organisation du code
+## Mettre en ligne sur Render
+
+### 1. Base de données MongoDB Atlas (gratuite)
+
+1. Crée un compte sur [mongodb.com/atlas](https://www.mongodb.com/atlas).
+2. **Create** → offre **M0 Free** → choisis une région proche.
+3. **Database Access** → **Add New Database User** : note l'identifiant et le
+   mot de passe.
+4. **Network Access** → **Add IP Address** → **Allow access from anywhere**
+   (`0.0.0.0/0`). Render n'a pas d'adresse fixe sur l'offre gratuite.
+5. **Database** → **Connect** → **Drivers** → copie la chaîne, du type :
+   `mongodb+srv://utilisateur:motdepasse@cluster0.xxxxx.mongodb.net/nitrorift`
+
+   Remplace `motdepasse` par le vrai, et ajoute `/nitrorift` avant le `?` pour
+   nommer la base.
+
+### 2. Le service web
+
+1. Pousse ce dépôt sur GitHub.
+2. Sur [render.com](https://render.com) : **New** → **Web Service** → choisis
+   le dépôt.
+3. Réglages :
+   - **Build Command** : `npm install && npm run build`
+   - **Start Command** : `npm start`
+   - **Instance Type** : Free
+4. **Environment** → ajoute :
+
+| Variable | Valeur |
+|---|---|
+| `MONGODB_URI` | la chaîne copiée à l'étape 1 |
+| `JWT_SECRET` | une longue chaîne aléatoire, à toi |
+| `ADMIN_KEY` | une autre chaîne, pour la page `/admin` |
+
+`PORT` est fourni automatiquement par Render, ne l'ajoute pas.
+
+5. **Create Web Service**. Le premier déploiement prend quelques minutes.
+
+Vérifie ensuite `https://ton-service.onrender.com/health` : tu dois lire
+`"base":"mongodb"`. Si tu lis `"memoire"`, la chaîne de connexion est
+incorrecte et les comptes ne seront pas sauvegardés.
+
+### Le service gratuit s'endort
+
+Render endort le service après une quinzaine de minutes sans visite, et le
+réveil prend jusqu'à une minute. Le jeu l'a prévu : il affiche
+« Réveil du serveur… » et réessaie tout seul. Ouvre simplement le lien une
+minute avant de jouer avec tes amis.
+
+### Mot de passe oublié
+
+Il n'y a pas d'envoi d'e-mail. Va sur `https://ton-service.onrender.com/admin`,
+saisis ta `ADMIN_KEY`, le pseudo du joueur et un nouveau mot de passe.
+
+---
+
+## Comment c'est construit
 
 ```
-client/    interface, rendu Three.js, HUD, entrées
-server/    Express, API, circuits (comptes et multijoueur à venir)
-shared/    code commun au navigateur et au serveur
-scripts/   outils hors jeu (génération des circuits, calibration)
+shared/      code partagé par le navigateur ET le serveur
+  config.js    toutes les valeurs réglables, GAME_NAME compris
+  geom.js      vecteurs et maths
+  track.js     le circuit comme ruban 3D (spline + vecteurs « haut »)
+  physics.js   physique arcade : repère lié à la piste, décrochage, vol
+  bots.js      pilotage automatique, trois niveaux
+  cars.js      les 4 voitures, statistiques et améliorations
+  economy.js   crédits, médailles, défis, barème des gains
+  tracks/      les 4 circuits en JSON
+server/
+  index.js     HTTP + fichiers du client
+  db.js        MongoDB, avec repli en mémoire
+  auth.js      comptes, bcryptjs, jetons JWT
+  rooms.js     salons privés
+  race.js      course serveur : bots, instantanés, compensation
+  multijoueur.js  couche Socket.io
+  garage.js    achats, records, classements
+  rewards.js   calcul des crédits — jamais par le client
+  admin.js     page de réinitialisation
+client/src/
+  main.js      boucle de jeu et enchaînement des écrans
+  render/      scène, piste, voitures, caméra de poursuite
+  game/        course, circuits, entrées clavier
+  ui/          ATH, salon, garage, connexion, minimap
+  net/         API et Socket.io, interpolation
+  audio/       son entièrement synthétisé
 ```
 
-Le dossier **`shared/`** est le cœur du projet : physique, données des circuits,
-voitures, économie et logique des bots y sont écrits une seule fois, en modules
-ES utilisables des deux côtés. C'est ce qui garantit que les bots du multijoueur,
-qui tournent sur le serveur, se comportent exactement comme ceux du solo.
+### Trois principes
 
-### Les circuits
+**Un seul code de physique.** `shared/physics.js` tourne dans le navigateur et
+sur le serveur. Les bots du multijoueur se comportent donc exactement comme
+ceux du solo, et un temps simulé hors affichage vaut un temps joué.
 
-Un circuit est un **ruban 3D** défini par des points de contrôle portant chacun
-une position, un **vecteur « haut » explicite**, une largeur, un type de bord et
-un type de surface. Le vecteur haut est donné à la main plutôt que déduit du
-repère de Frenet, qui se retourne brutalement dans les loopings.
+**Le serveur décide de tout ce qui compte.** Crédits, achats, améliorations,
+médailles : le client annonce ce qu'il a fait, le serveur applique le barème et
+borne ce qui vient de lui. Un client modifié ne peut pas s'offrir une voiture.
 
-La voiture est repérée par sa distance le long de la piste, son décalage latéral
-et sa hauteur au-dessus de la surface. La gravité utile est celle qui s'exprime
-le long du vecteur haut, ce qui permet de rouler dans un looping, sur un virage
-relevé ou sur un mur vertical — et de **décrocher** si l'on n'arrive pas assez
-lancé.
+**Le chronomètre tourne chez le joueur.** En multijoueur, chaque client mesure
+son propre temps : le ping ne pénalise personne. Le serveur ne fait qu'un
+contrôle de plausibilité, en rejetant un temps qui descend sous 75 % du
+meilleur tour d'un bot difficile en voiture entièrement améliorée.
 
-Les fichiers `shared/tracks/*.json` sont le format lu par le jeu. Ils sont
-générés par `npm run tracks` depuis une description en commandes de tracé
-(`scripts/build-tracks.js`), bien plus maniable que des centaines de points de
-contrôle écrits à la main. On peut les retoucher à la main, mais relancer le
-script les écrase.
+### Le repère lié à la piste
 
----
+Chaque circuit est un ruban défini par une spline, avec un **vecteur « haut »
+explicite à chaque point de contrôle**, interpolé le long du tracé. La voiture
+est repérée par sa distance le long de la piste, son décalage latéral et sa
+hauteur au-dessus de la surface, et la gravité pointe vers la route.
 
-## Ajouter des assets
+C'est ce qui permet de rouler dans un looping, sur un mur vertical ou dans un
+tire-bouchon. Le repère de Frenet, qui se retourne dans les loopings, ne le
+permettrait pas.
 
-Le jeu fonctionne **sans aucun asset** : voitures, circuits et ciels sont générés
-par le code. Pour les remplacer par de vrais fichiers, chaque dossier de
-`client/assets/` contient un README qui liste les noms et formats attendus :
-
-- [`client/assets/models/cars/`](client/assets/models/cars/README.md) — voitures glTF
-- [`client/assets/textures/`](client/assets/textures/README.md) — textures
-- [`client/assets/hdri/`](client/assets/hdri/README.md) — ciels
-- [`client/assets/audio/`](client/assets/audio/README.md) — sons et musiques
-
-Créditez les auteurs dans [`CREDITS.md`](CREDITS.md).
+Conséquence voulue : si la vitesse est trop faible, l'accélération centripète
+`v²/R` ne compense plus la gravité et la voiture **décroche**. Il faut arriver
+lancé dans un looping.
 
 ---
 
-## Variables d'environnement
+## Ajouter de vrais assets
 
-Copiez `.env.example` en `.env`.
+Le jeu fonctionne sans aucun fichier externe : voitures et sons sont générés
+par le code. Pour les remplacer, chaque dossier a son README listant les noms
+exacts attendus :
 
-| Variable | Rôle |
-|---|---|
-| `MONGODB_URI` | Connexion MongoDB Atlas. Vide en local : le serveur démarre sans base. |
-| `JWT_SECRET` | Clé de signature des jetons de session |
-| `ADMIN_KEY` | Accès à la page `/admin` |
-| `PORT` | Port d'écoute (fourni par Render) |
+- `client/assets/models/cars/` — `comete.glb`, `frelon.glb`, `vipere.glb`,
+  `tempete.glb`. Si le modèle contient des roues séparées, elles tournent et
+  braquent automatiquement.
+- `client/assets/hdri/` — un ciel par décor, pour l'éclairage et les reflets.
+- `client/assets/textures/` — routes, rochers, bâtiments.
+- `client/assets/audio/` — musiques et effets.
 
-Le déploiement pas à pas sur Render et la création d'un cluster MongoDB Atlas
-gratuit seront détaillés à l'étape 13.
+Sources conseillées : [Poly Haven](https://polyhaven.com) (CC0) pour les HDRI
+et textures, [Sketchfab](https://sketchfab.com) pour les modèles (vérifie la
+licence de chacun), [Freesound](https://freesound.org) et
+[Pixabay](https://pixabay.com) pour l'audio.
+
+Crédite les auteurs dans [`CREDITS.md`](CREDITS.md).
+
+---
+
+## État du projet
+
+Fait : structure, conduite et caméra, physique 3D complète, checkpoints et
+chronométrage, bots à trois niveaux, les 4 circuits, rendu et effets, comptes
+et sauvegarde, multijoueur complet, garage et économie, médailles, défis,
+classements, son.
+
+Reste à faire : showroom 3D dans le garage (l'écran est fonctionnel mais en
+2D), Grand Prix enchaînant automatiquement les 4 circuits, contre-la-montre
+avec fantôme, chat textuel, et le remplacement des assets générés par de vrais
+modèles et sons.

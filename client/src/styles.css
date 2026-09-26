@@ -492,3 +492,9 @@ html, body {
 .medaille.or { background: #e9b949; color: #2a1e04; }
 .medaille.argent { background: #b8c0c9; color: #1b2430; }
 .medaille.bronze { background: #b07a4a; color: #23150a; }
+
+.ligne-reglage input[type="range"] { flex: 1; accent-color: var(--accent, #f0a13c); }
+.ligne-reglage .valeur {
+  width: 34px; text-align: right;
+  font: 12px ui-monospace, monospace; color: #8791a0;
+}
