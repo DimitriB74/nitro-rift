@@ -6,6 +6,18 @@
 
 import { reglages } from '../reglages.js';
 
+/** Vrai si l'élément visé attend du texte plutôt qu'une commande de jeu. */
+function saisieEnCours(cible) {
+  if (!cible || cible.nodeType !== 1) return false;
+  if (cible.isContentEditable) return true;
+  const balise = cible.tagName;
+  if (balise === 'TEXTAREA' || balise === 'SELECT') return true;
+  if (balise !== 'INPUT') return false;
+  // Une case à cocher ou un curseur de réglage ne consomme pas de texte : on
+  // laisse le jeu répondre comme avant.
+  return !['checkbox', 'radio', 'range', 'button', 'submit'].includes(cible.type);
+}
+
 export class Clavier {
   constructor() {
     this.enfoncees = new Set();
@@ -41,6 +53,12 @@ export class Clavier {
     }
     if (!this.actif) return;
     if (e.repeat) return;
+
+    // Quand le joueur écrit — pseudo, mot de passe, code de salon, chat — le
+    // clavier appartient au champ. Sans ce garde-fou, `preventDefault` plus bas
+    // avalait toutes les lettres qui servent aussi à conduire : impossible de
+    // taper un pseudo contenant un W, un A, un S, un D ou une espace.
+    if (saisieEnCours(e.target)) return;
 
     // On n'empêche le comportement par défaut que pour les touches qui servent
     // vraiment au jeu : le reste du navigateur doit continuer de fonctionner.

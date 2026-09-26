@@ -6,8 +6,7 @@
 // même code que dans le navigateur, donc un tour réalisable ici est réalisable
 // en jeu.
 
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { demarreServeur } from './aide.mjs';
 
 import { Enregistreur, decodeFantome, encodeFantome, HZ_FANTOME, TAILLE_MAX } from '../shared/fantome.js';
 import { creerVoiture, pasPhysique } from '../shared/physics.js';
@@ -140,11 +139,7 @@ console.log('\n=== Bout en bout côté serveur ===');
 
 const PORT = 3331;
 const BASE = `http://127.0.0.1:${PORT}`;
-const serveur = spawn('node', ['server/index.js'], {
-  cwd: fileURLToPath(new URL('..', import.meta.url)),
-  env: { ...process.env, PORT: String(PORT), JWT_SECRET: 't' },
-});
-await wait(9000);
+const serveur = await demarreServeur(PORT);
 
 let jeton = null;
 async function api(chemin, corps, methode = 'POST') {

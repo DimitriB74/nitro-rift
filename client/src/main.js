@@ -23,11 +23,13 @@ import { creerRendu, creerScene, redimensionne, suitOmbres } from './render/scen
 import { construitPiste, detruitPiste } from './render/piste.js';
 import { creerVoiture, chargeModele, orienteVoiture, animeRoues, ajusteTransparence, rendFantomatique } from './render/voiture.js';
 import { CameraPoursuite } from './render/camera.js';
+import { Showroom } from './render/showroom.js';
 import { Hud, formateChrono, echappe, nomVoiture } from './ui/hud.js';
 import { demandeConnexion, majBandeau } from './ui/auth.js';
 import { deconnexion, reprendSession } from './net/api.js';
 import { Reseau, TamponDistant } from './net/socket.js';
 import { EcranSalon } from './ui/salon.js';
+import { Chat } from './ui/chat.js';
 import { Garage, Classements } from './ui/garage.js';
 import { Audio } from './audio/audio.js';
 import { jetonActuel } from './net/api.js';
@@ -155,10 +157,20 @@ class Jeu {
 
     majBandeau(this.profil);
 
+    // Le showroom a son propre contexte WebGL. S'il ne peut pas être créé
+    // (pilote capricieux, contexte déjà saturé), le garage reste utilisable en
+    // 2D : c'est un agrément, pas une dépendance.
+    this.showroom = null;
+    try {
+      this.showroom = new Showroom(document.getElementById('garage-showroom'));
+    } catch (e) {
+      console.warn('Showroom indisponible :', e.message);
+    }
+
     this.garage = new Garage(() => jetonActuel(), (profil) => {
       this.profil = profil;
       majBandeau(profil);
-    });
+    }, this.showroom, this.modeles);
     this.classements = new Classements(this.catalogue, this.profil?.pseudo ?? null);
 
     montre('ecran-menu');
@@ -554,6 +566,14 @@ class Jeu {
     const course = this.course;
 
     // --- Touches hors conduite ---------------------------------------------
+    // Le chat n'existe qu'en réseau, et il capte le clavier tant qu'il est
+    // ouvert : on ne veut pas accélérer en tapant un « w ».
+    if (course.reseau && this.chat && !this.chat.ouvert &&
+        this.clavier.consommeImpulsion('chat')) {
+      this.chat.ouvre(this.clavier);
+    }
+    if (this.chat?.ouvert) this.chat.afficheCourse(this.horloge);
+
     if (this.clavier.consommeImpulsion('pause')) this.basculePause();
     if (!this.enPause) {
       if (this.clavier.consommeImpulsion('checkpoint')) course.retourDernierCheckpoint();
@@ -586,6 +606,7 @@ class Jeu {
     if (this.soleil) suitOmbres(this.soleil, this.cameraPoursuite.camera.position);
 
     this.hud.maj(course, this.horloge, dt);
+    if (course.reseau) this.chat?.afficheCourse(this.horloge);
 
     if (course.phase === 'fini') this.termine();
   }
@@ -685,6 +706,7 @@ class Jeu {
   }
 
   termine() {
+    this.chat?.ferme();
     afficheResultats(this);
     this.audio?.arreteMoteur();
     this.audio?.arreteVent();
@@ -693,6 +715,7 @@ class Jeu {
   }
 
   quitteCourse() {
+    this.chat?.ferme();
     if (this.course?.reseau) this.reseau?.quitter();
     this.course = null;
     this.audio.arreteMoteur();
@@ -711,6 +734,7 @@ class Jeu {
     this.reseau = new Reseau();
     await this.reseau.connecter(this.profil?.pseudo);
     this.salonUi = new EcranSalon(this.reseau, this.catalogue);
+    this.chat = new Chat(this.reseau, () => this.reseau.socket?.id ?? null);
 
     this.reseau.on('salon:maj', (salon) => {
       this.salonUi.affiche(salon);
@@ -718,6 +742,14 @@ class Jeu {
     });
 
     this.reseau.on('salon:erreur', ({ message }) => this.salonUi.erreur(message));
+
+    this.reseau.on('chat:message', (message) => {
+      this.chat.ajoute(message);
+      // En course, un message de quelqu'un d'autre mérite un discret signal.
+      if (this.course?.reseau && message.id !== this.reseau.socket?.id) {
+        this.audio?.note({ freq: 880, duree: 0.06, gain: 0.05, type: 'sine' });
+      }
+    });
 
     this.reseau.on('salon:exclu', () => {
       this.salonUi.erreur('');
@@ -785,7 +817,7 @@ function construitInterface(jeu) {
       }
     },
     'retour-mode': () => montre('ecran-mode'),
-    'quitter-salon': () => { jeu.reseau?.quitter(); montre('ecran-multi'); },
+    'quitter-salon': () => { jeu.reseau?.quitter(); jeu.chat?.vide(); montre('ecran-multi'); },
     'parametres': () => { construitParametres(jeu); montre('ecran-parametres'); },
     'garage': () => {
       if (!jeu.profil) {
@@ -797,7 +829,12 @@ function construitInterface(jeu) {
       montre('ecran-garage');
     },
     'classements': () => { jeu.classements.ouvre(); montre('ecran-classements'); },
-    'retour-menu': () => { jeu.course = null; jeu.gp = null; montre('ecran-menu'); },
+    'retour-menu': () => {
+      jeu.course = null;
+      jeu.gp = null;
+      jeu.garage?.ferme();
+      montre('ecran-menu');
+    },
     'deconnexion': async () => {
       deconnexion();
       jeu.profil = await demandeConnexion(montre);
@@ -816,6 +853,7 @@ function construitInterface(jeu) {
 
   // --- Créer / rejoindre un salon ------------------------------------------
   document.getElementById('multi-creer').onclick = async () => {
+    jeu.chat?.vide();
     const reponse = await jeu.reseau.creerSalon();
     if (!reponse?.ok) {
       document.getElementById('multi-erreur').textContent = reponse?.message ?? 'Création impossible';
@@ -827,6 +865,7 @@ function construitInterface(jeu) {
 
   const champCode = document.getElementById('multi-code');
   const rejoindre = async () => {
+    jeu.chat?.vide();
     const code = champCode.value.trim().toUpperCase();
     if (code.length !== 4) {
       document.getElementById('multi-erreur').textContent = 'Le code fait 4 caractères.';

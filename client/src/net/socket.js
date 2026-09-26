@@ -33,6 +33,7 @@ export class Reseau {
     for (const evenement of [
       'salon:maj', 'salon:erreur', 'salon:exclu', 'salon:nouvel-hote', 'salon:remplacement',
       'course:demarrer', 'course:instantane', 'course:premier', 'course:resultats',
+      'chat:message',
     ]) {
       this.socket.on(evenement, (charge) => {
         if (evenement === 'salon:maj') this.salon = charge;
@@ -109,6 +110,9 @@ export class Reseau {
     this.socket?.emit('salon:quitter');
     this.salon = null;
   }
+
+  /** Message de discussion. Le serveur borne la longueur et la cadence. */
+  chat(texte) { this.socket?.emit('chat', { texte }); }
 
   // ---- course --------------------------------------------------------------
 

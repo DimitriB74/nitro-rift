@@ -135,6 +135,15 @@
         </div>
       </div>
       <div class="panneau" id="salon-championnat" hidden></div>
+
+      <div class="panneau chat">
+        <h3>Discussion</h3>
+        <ul class="chat-messages" id="chat-messages"></ul>
+        <div class="chat-saisie">
+          <input id="chat-saisie" maxlength="200" placeholder="Écris un message…" autocomplete="off">
+          <button class="bouton" id="chat-envoyer">Envoyer</button>
+        </div>
+      </div>
       <p class="erreur" id="salon-erreur"></p>
       <div class="actions">
         <button class="bouton principal" id="salon-pret">Je suis prêt</button>
@@ -212,6 +221,10 @@
         </div>
         <div class="panneau">
           <h3 id="garage-nom">—</h3>
+          <div class="showroom">
+            <canvas id="garage-showroom"></canvas>
+            <span class="showroom-aide">Glisse pour tourner autour · molette pour zoomer</span>
+          </div>
           <p class="aide" id="garage-profil"></p>
           <div id="garage-stats"></div>
           <p class="erreur" id="garage-erreur"></p>
@@ -305,6 +318,14 @@
       <div class="hud-centre">
         <div class="compte-a-rebours" id="hud-compte"></div>
         <div class="messages" id="hud-messages"></div>
+      </div>
+
+      <div class="chat-course" id="chat-course-bloc">
+        <ul class="chat-messages flottant" id="chat-course-messages" hidden></ul>
+        <div class="chat-saisie" id="chat-course" hidden>
+          <input id="chat-course-saisie" maxlength="200" placeholder="Message… (Entrée pour envoyer, Échap pour annuler)"
+                 autocomplete="off">
+        </div>
       </div>
 
       <div class="fps" id="hud-fps" hidden>0 FPS</div>

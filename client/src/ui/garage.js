@@ -25,12 +25,18 @@ export class Garage {
   /**
    * @param {() => string|null} jeton      accès au jeton courant
    * @param {(profil) => void}  surProfil  appelé à chaque changement
+   * @param {object} [showroom]  { montre, demarre, arrete } — la vue 3D, si elle
+   *                             a pu être créée (WebGL peut manquer)
+   * @param {object} [modeles]   modèles glTF déjà chargés, par voiture
    */
-  constructor(jeton, surProfil) {
+  constructor(jeton, surProfil, showroom = null, modeles = {}) {
     this.jeton = jeton;
     this.surProfil = surProfil;
+    this.showroom = showroom;
+    this.modeles = modeles;
     this.profil = null;
     this.selection = null;
+    this.exposee = null;          // ce que le showroom montre actuellement
 
     $('garage-action').onclick = () => this.action();
   }
@@ -39,6 +45,25 @@ export class Garage {
     this.profil = profil;
     this.selection = profil?.voitureActive ?? IDS_VOITURES[0];
     this.affiche();
+    this.showroom?.demarre();
+  }
+
+  ferme() {
+    this.showroom?.arrete();
+  }
+
+  /**
+   * Met la voiture sélectionnée sur le plateau, avec la peinture active.
+   * On ne reconstruit le modèle que si quelque chose a changé : le showroom
+   * tourne en continu, il ne faut pas recréer la voiture à chaque affichage.
+   */
+  majShowroom() {
+    if (!this.showroom) return;
+    const peinture = this.profil?.peintureActive ?? 'rouge';
+    if (this.exposee?.voiture === this.selection && this.exposee?.peinture === peinture) return;
+
+    this.exposee = { voiture: this.selection, peinture };
+    this.showroom.montre(this.selection, peinture, this.modeles?.[this.selection] ?? null);
   }
 
   erreur(message) {
@@ -93,6 +118,7 @@ export class Garage {
       };
     }
 
+    this.majShowroom();
     this.afficheDetail();
   }
 

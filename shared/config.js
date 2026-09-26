@@ -246,6 +246,7 @@ export const TOUCHES_DEFAUT = {
   nitro: ['ShiftLeft', 'ShiftRight'],
   checkpoint: ['Enter'],
   recommencer: ['Backspace'],
+  chat: ['KeyT'],
   pause: ['Escape']
 };
 
@@ -258,6 +259,7 @@ export const LIBELLES_TOUCHES = {
   nitro: 'Nitro',
   checkpoint: 'Retour au checkpoint',
   recommencer: 'Recommencer la course',
+  chat: 'Discussion (multijoueur)',
   pause: 'Pause / menu'
 };
 

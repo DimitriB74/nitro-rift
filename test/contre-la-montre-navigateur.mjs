@@ -5,8 +5,7 @@
 // on ne juge donc pas la conduite, on vérifie le câblage. La physique est
 // avancée à la main par petits pas, ce qui ne dépend pas de la cadence d'écran.
 
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { demarreServeur } from './aide.mjs';
 import { chromium } from 'playwright';
 
 import { Enregistreur, decodeFantome } from '../shared/fantome.js';
@@ -20,10 +19,6 @@ import { circuit as chargeCircuit, ligneCourse } from '../server/circuits.js';
 const PORT = 3341;
 const ADRESSE = `http://127.0.0.1:${PORT}`;
 const SHOTS = process.env.SHOTS ?? '/tmp';
-const serveur = spawn('node', ['server/index.js'], {
-  cwd: fileURLToPath(new URL('..', import.meta.url)),
-  env: { ...process.env, PORT: String(PORT), JWT_SECRET: 't' },
-});
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 let ok = 0, ko = 0;
 const check = (l, c, d = '') => { c ? ok++ : ko++; console.log(`  ${c ? 'OK   ' : 'ÉCHEC'} ${l}${d ? '  — ' + d : ''}`); };
@@ -56,7 +51,7 @@ const record = tourDeBot();
 const dureeRecord = decodeFantome(record.fantome).duree;
 console.log(`  fantôme de référence : ${record.temps.toFixed(3)} s, ${record.fantome.length} caractères`);
 
-await wait(9000);
+const serveur = await demarreServeur(PORT);
 
 const navigateur = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',

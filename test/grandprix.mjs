@@ -7,9 +7,8 @@
 // personne d'autre n'est en piste. On teste le comptage des points, pas la
 // conduite — la physique est vérifiée ailleurs.
 
-import { spawn } from 'node:child_process';
 import { io as connecte } from 'socket.io-client';
-import { fileURLToPath } from 'node:url';
+import { demarreServeur } from './aide.mjs';
 
 import {
   ajouteParticipants, circuitCourant, classementGeneral, creerGrandPrix,
@@ -75,18 +74,13 @@ console.log('\n=== Championnat multijoueur ===');
 
 const PORT = 3312;
 const ADRESSE = `http://127.0.0.1:${PORT}`;
-const serveur = spawn('node', ['server/index.js'], {
-  cwd: fileURLToPath(new URL('..', import.meta.url)),
-  env: { ...process.env, PORT: String(PORT), JWT_SECRET: 't' },
-});
-serveur.stderr.on('data', (d) => process.stderr.write(`  [serveur] ${d}`));
 
 const attend = (s, ev, ms = 8000) => new Promise((res, rej) => {
   const t = setTimeout(() => rej(new Error(`timeout ${ev}`)), ms);
   s.once(ev, (d) => { clearTimeout(t); res(d); });
 });
 
-await wait(9000); // le serveur calcule les références de temps au démarrage
+const serveur = await demarreServeur(PORT);
 
 const A = connecte(ADRESSE, { auth: { pseudo: 'Dimitri' } });
 const B = connecte(ADRESSE, { auth: { pseudo: 'Ami' } });

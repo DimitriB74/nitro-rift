@@ -53,6 +53,25 @@ function calculeReferences() {
 
 const erreur = (socket, message) => socket.emit('salon:erreur', { message });
 
+// --- Chat -------------------------------------------------------------------
+/** Longueur maximale d'un message, coupée sans prévenir. */
+const CHAT_LONGUEUR_MAX = 200;
+/** Anti-inondation : au plus N messages par fenêtre glissante. */
+const CHAT_FENETRE_MS = 5000;
+const CHAT_PAR_FENETRE = 5;
+
+/**
+ * Nettoie un message : espaces normalisés, caractères de contrôle retirés,
+ * longueur bornée. L'échappement HTML est fait à l'affichage, côté client.
+ */
+function nettoieMessage(texte) {
+  return String(texte ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, CHAT_LONGUEUR_MAX);
+}
+
 /** Participants d'un salon, sous la forme attendue par le module Grand Prix. */
 function inscrits(salon) {
   return [...salon.humains.values()].map((h) => ({
@@ -267,6 +286,33 @@ export function brancheMultijoueur(serveurHttp) {
     });
 
     socket.on('salon:quitter', () => quitte());
+
+    // ---- chat -------------------------------------------------------------
+
+    socket.on('chat', ({ texte } = {}) => {
+      const salon = monSalon();
+      if (!salon) return;
+
+      const propre = nettoieMessage(texte);
+      if (!propre) return;
+
+      // Fenêtre glissante : on ne coupe pas la parole, on ignore l'excès.
+      const maintenant = Date.now();
+      const recents = (socket.data.chatEnvois ?? []).filter((t) => maintenant - t < CHAT_FENETRE_MS);
+      if (recents.length >= CHAT_PAR_FENETRE) {
+        return erreur(socket, 'Doucement avec le chat.');
+      }
+      recents.push(maintenant);
+      socket.data.chatEnvois = recents;
+
+      io.to(salon.code).emit('chat:message', {
+        id: socket.id,
+        pseudo: socket.data.pseudo,
+        invite: socket.data.invite,
+        texte: propre,
+        heure: maintenant,
+      });
+    });
 
     // ---- course -----------------------------------------------------------
 

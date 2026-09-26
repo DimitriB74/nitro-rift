@@ -80,8 +80,40 @@ await wait(400);
 const verrou = await page.textContent('#garage-erreur');
 check('une peinture verrouillée explique pourquoi', verrou.includes('défi'), verrou);
 
+console.log('\n=== Showroom 3D ===');
+// Le conteneur rend en logiciel : on vérifie que la scène existe et tourne,
+// pas la beauté de l'image.
+const showroom = await page.evaluate(() => {
+  const jeu = window.__jeu;
+  if (!jeu.showroom) return { absent: true };
+  const avant = jeu.showroom.angle;
+  jeu.showroom.maj(0.5);
+  return {
+    absent: false,
+    actif: jeu.showroom.actif,
+    voiture: jeu.showroom.voiture?.name ?? null,
+    aTourne: jeu.showroom.angle !== avant,
+    largeur: document.getElementById('garage-showroom').clientWidth,
+  };
+});
+check('le showroom expose la voiture sélectionnée',
+  showroom.absent === false && showroom.voiture === 'voiture-tempete',
+  showroom.absent ? 'WebGL indisponible' : `${showroom.voiture}, canvas ${showroom.largeur} px`);
+check('le plateau tourne tant que le garage est ouvert',
+  showroom.actif === true && showroom.aTourne === true);
+
+// Changer de voiture doit changer le modèle exposé.
+await page.evaluate(() => document.querySelector('#garage-liste [data-voiture="vipere"]')?.click());
+await wait(500);
+const change = await page.evaluate(() => window.__jeu.showroom?.voiture?.name ?? null);
+check('changer de voiture change le modèle exposé', change === 'voiture-vipere', change);
+await page.screenshot({ path: `${SHOTS}/nr-13-showroom.png` });
+
 console.log('\n=== Classements ===');
 await clic('retour-menu');
+const arret = await page.evaluate(() => window.__jeu.showroom?.actif ?? null);
+check('le showroom s’arrête en quittant le garage', arret === false);
+
 await clic('classements');
 await page.waitForSelector('#ecran-classements.actif', { timeout: 6000 });
 await wait(1200);
