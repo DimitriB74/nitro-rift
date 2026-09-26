@@ -11,7 +11,8 @@
     "start": "node server/index.js",
     "tracks": "node scripts/build-tracks.js",
     "calibrate": "node scripts/calibrate-medals.js",
-    "verifier": "node scripts/verifier.js"
+    "verifier": "node scripts/verifier.js",
+    "test:multi": "node test/multijoueur.mjs"
   },
   "engines": {
     "node": ">=20"

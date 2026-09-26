@@ -15,6 +15,7 @@ import { GAME_NAME, VERSION } from '../shared/config.js';
 import { baseConnectee, connecterBase } from './db.js';
 import { brancheAuth } from './auth.js';
 import { brancheAdmin } from './admin.js';
+import { brancheMultijoueur } from './multijoueur.js';
 
 const ICI = path.dirname(fileURLToPath(import.meta.url));
 const RACINE = path.join(ICI, '..');
@@ -112,10 +113,14 @@ const serveur = app.listen(PORT, () => {
   }
 });
 
+// Socket.io se greffe sur le même serveur HTTP : un seul port, ce qu'exige
+// l'offre gratuite de Render.
+const io = brancheMultijoueur(serveur);
+
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     serveur.close(() => process.exit(0));
   });
 }
 
-export { app, serveur };
+export { app, serveur, io };
