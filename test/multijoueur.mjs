@@ -1,10 +1,11 @@
 import { spawn } from 'node:child_process';
 import { io as connecte } from 'socket.io-client';
+import { fileURLToPath } from 'node:url';
 
 const PORT = 3311;
-const URL = `http://127.0.0.1:${PORT}`;
+const ADRESSE = `http://127.0.0.1:${PORT}`;
 const serveur = spawn('node', ['server/index.js'], {
-  cwd: new URL('..', import.meta.url).pathname,
+  cwd: fileURLToPath(new URL('..', import.meta.url)),
   env: { ...process.env, PORT: String(PORT), JWT_SECRET: 't' },
 });
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -16,8 +17,8 @@ const attend = (s, ev, ms = 6000) => new Promise((res, rej) => {
 });
 await wait(9000); // le serveur calcule les références de temps au démarrage
 
-const A = connecte(URL, { auth: { pseudo: 'Dimitri' } });
-const B = connecte(URL, { auth: { pseudo: 'Ami' } });
+const A = connecte(ADRESSE, { auth: { pseudo: 'Dimitri' } });
+const B = connecte(ADRESSE, { auth: { pseudo: 'Ami' } });
 await Promise.all([attend(A, 'bienvenue'), attend(B, 'bienvenue')]);
 check('deux clients connectés', true);
 
@@ -61,7 +62,7 @@ A.emit('salon:lancer');
 const refus = await attenduRefus;
 check('lancement refusé si tout le monde n’est pas prêt', !!refus, refus?.message);
 
-const C = connecte(URL, { auth: { pseudo: 'Tiers' } });
+const C = connecte(ADRESSE, { auth: { pseudo: 'Tiers' } });
 await attend(C, 'bienvenue');
 await new Promise(r => C.emit('salon:rejoindre', { code }, r));
 
@@ -126,7 +127,7 @@ console.log('  classement :', resultats.classement.map(c =>
   (c.tempsTotal ? ` ${c.tempsTotal.toFixed(2)}s` : c.rejete ? ' rejeté' : ' abandon')).join(' · '));
 
 console.log('\n=== Transfert d’hôte ===');
-const D = connecte(URL, { auth: { pseudo: 'Quatrieme' } });
+const D = connecte(ADRESSE, { auth: { pseudo: 'Quatrieme' } });
 await attend(D, 'bienvenue');
 const arrivee = await new Promise(r => D.emit('salon:rejoindre', { code }, r));
 check('on peut rejoindre une fois la course finie', arrivee.ok, arrivee.message ?? '');
