@@ -35,12 +35,22 @@ const DELAI_DEPART = 3.5; // secondes avant le feu vert, compte à rebours compr
 const MARGE_PLAUSIBILITE = 0.75;
 
 export class CourseServeur {
-  constructor(salon, circuit, ligne, diffuser, reference) {
+  /**
+   * @param {object}   salon
+   * @param {object}   circuit
+   * @param {object}   ligne
+   * @param {Function} diffuser   (evenement, charge) -> void
+   * @param {number}   reference  meilleur temps au tour connu, pour la plausibilité
+   * @param {Function} [apresFin] appelée avec la charge des résultats juste avant
+   *                             leur diffusion, et libre de l'enrichir (Grand Prix)
+   */
+  constructor(salon, circuit, ligne, diffuser, reference, apresFin = null) {
     this.salon = salon;
     this.circuit = circuit;
     this.ligne = ligne;
     this.diffuser = diffuser;
     this.tempsReference = reference ?? 0;
+    this.apresFin = apresFin;
 
     this.tours = salon.tours ?? circuit.tours ?? COURSE.toursParDefaut;
     this.heureDepart = Date.now() + DELAI_DEPART * 1000;
@@ -278,7 +288,7 @@ export class CourseServeur {
     this.salon.phase = 'attente';
     for (const humain of this.salon.humains.values()) humain.pret = false;
 
-    this.diffuser('course:resultats', {
+    const charge = {
       circuit: this.circuit.id,
       classement: this.classement.map((p) => ({
         id: p.id,
@@ -292,8 +302,16 @@ export class CourseServeur {
         abandon: !!p.resultat.abandon,
         rejete: !!p.resultat.rejete,
       })),
-      salon: salonPublic(this.salon),
-    });
+      salon: null,
+    };
+
+    // Le Grand Prix compte ses points ici : la charge part alors complète, et le
+    // client n'a pas deux messages à recoller. `salonPublic` est relu ensuite,
+    // car le championnat peut avoir changé le circuit de la manche suivante.
+    this.apresFin?.(charge);
+    charge.salon = salonPublic(this.salon);
+
+    this.diffuser('course:resultats', charge);
   }
 
   arrete() {

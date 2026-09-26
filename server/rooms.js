@@ -11,6 +11,7 @@ import { RESEAU, COURSE } from '../shared/config.js';
 import { VOITURE_DEPART, PEINTURE_DEPART, niveauxVides } from '../shared/cars.js';
 import { IDS_NIVEAUX, tirePseudos, choisitVoiture, ameliorationsBot } from '../shared/bots.js';
 import { STATS } from '../shared/cars.js';
+import { grandPrixPublic } from '../shared/grandprix.js';
 
 export const salons = new Map(); // code → salon
 
@@ -245,6 +246,7 @@ export function salonPublic(salon) {
     hoteId: salon.hoteId,
     max: COURSE.participantsMax,
     participants: [...salon.humains.values()].map(participant).concat(salon.bots.map(participant)),
+    grandPrix: grandPrixPublic(salon.grandPrix),
   };
 }
 

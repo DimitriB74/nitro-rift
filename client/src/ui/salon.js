@@ -65,7 +65,10 @@ export class EcranSalon {
     const lancer = $('salon-lancer');
     lancer.hidden = !this.estHote();
     lancer.disabled = !tousPrets;
-    lancer.textContent = tousPrets ? 'Lancer la course' : 'En attente des joueurs…';
+    const gpEnCours = salon.mode === 'grand-prix';
+    const manche = gpEnCours ? (salon.grandPrix?.termine ? 1 : salon.grandPrix?.manche ?? 1) : 0;
+    lancer.textContent = !tousPrets ? 'En attente des joueurs…'
+      : gpEnCours ? `Lancer la manche ${manche}` : 'Lancer la course';
   }
 
   afficheParticipants() {
@@ -103,31 +106,77 @@ export class EcranSalon {
 
   afficheReglages() {
     const bloc = $('salon-reglages');
+    const gp = this.salon.grandPrix;
+    const enGp = this.salon.mode === 'grand-prix';
 
     if (!this.estHote()) {
       const circuit = this.circuits.find((c) => c.id === this.salon.circuit);
-      bloc.innerHTML = `<p class="aide">Circuit : <b>${echappe(circuit?.nom ?? this.salon.circuit)}</b><br>
+      bloc.innerHTML = `<p class="aide">Mode : <b>${enGp ? 'Grand Prix' : 'Course'}</b><br>
+        ${enGp && gp ? `Manche ${gp.manche} sur ${gp.manches}<br>` : ''}
+        Circuit : <b>${echappe(circuit?.nom ?? this.salon.circuit)}</b><br>
         ${this.salon.tours} tour${this.salon.tours > 1 ? 's' : ''}<br>
         L'hôte choisit les réglages.</p>`;
+      this.afficheChampionnat();
       return;
     }
 
+    // En Grand Prix, le circuit de la manche est imposé : on l'annonce au lieu
+    // de laisser le choix, sinon l'hôte pourrait fausser le championnat.
+    const blocCircuits = enGp
+      ? `<p class="aide">Manche ${gp?.manche ?? 1} sur ${gp?.manches ?? 4} :
+          <b>${echappe(this.circuits.find((c) => c.id === this.salon.circuit)?.nom ?? '')}</b></p>`
+      : `<div class="choix-voitures" id="salon-circuits">
+          ${this.circuits.map((c) => `<button data-circuit="${c.id}"
+            class="${c.id === this.salon.circuit ? 'actif' : ''}">${echappe(c.nom)}</button>`).join('')}
+        </div>`;
+
     bloc.innerHTML = `
-      <div class="choix-voitures" id="salon-circuits">
-        ${this.circuits.map((c) => `<button data-circuit="${c.id}"
-          class="${c.id === this.salon.circuit ? 'actif' : ''}">${echappe(c.nom)}</button>`).join('')}
+      <div class="segments" id="salon-modes">
+        <button class="segment ${enGp ? '' : 'actif'}" data-mode="course">Course</button>
+        <button class="segment ${enGp ? 'actif' : ''}" data-mode="grand-prix">Grand Prix</button>
       </div>
+      ${blocCircuits}
       <p class="aide" style="margin-top:10px">Ajouter un bot</p>
       <div class="ligne-bot">
         ${IDS_NIVEAUX.map((n) => `<button class="bouton" data-bot="${n}">${NIVEAUX[n].nom}</button>`).join('')}
       </div>`;
 
+    for (const bouton of bloc.querySelectorAll('[data-mode]')) {
+      bouton.onclick = () => this.reseau.reglages({ mode: bouton.dataset.mode });
+    }
     for (const bouton of bloc.querySelectorAll('[data-circuit]')) {
       bouton.onclick = () => this.reseau.reglages({ circuit: bouton.dataset.circuit });
     }
     for (const bouton of bloc.querySelectorAll('[data-bot]')) {
       bouton.onclick = () => this.reseau.ajouterBot(bouton.dataset.bot);
     }
+    this.afficheChampionnat();
+  }
+
+  /** Classement du championnat en cours, s'il y en a un. */
+  afficheChampionnat() {
+    const bloc = $('salon-championnat');
+    if (!bloc) return;
+
+    const gp = this.salon.grandPrix;
+    // Rien à montrer avant la première manche : le tableau serait vide de sens.
+    if (this.salon.mode !== 'grand-prix' || !gp || gp.manche <= 1) {
+      bloc.hidden = true;
+      return;
+    }
+
+    bloc.hidden = false;
+    bloc.innerHTML = `<h3>Championnat</h3>
+      <table class="tableau-resultats compact">
+        <thead><tr><th>#</th><th>Pilote</th>
+          ${gp.circuits.map((_, i) => `<th>M${i + 1}</th>`).join('')}<th>Pts</th></tr></thead>
+        <tbody>${gp.classement.map((l) => `
+          <tr class="${l.id === this.monId ? 'moi' : ''}">
+            <td>${l.place}</td><td>${echappe(l.nom)}</td>
+            ${gp.circuits.map((_, i) => `<td class="temps">${l.positions[i] ?? '—'}</td>`).join('')}
+            <td class="temps"><b>${l.points}</b></td>
+          </tr>`).join('')}</tbody>
+      </table>`;
   }
 
   afficheVoitures() {

@@ -14,8 +14,9 @@
     "verifier": "node scripts/verifier.js",
     "test:multi": "node test/multijoueur.mjs",
     "test:garage": "node test/garage.mjs",
+    "test:gp": "node test/grandprix.mjs",
     "test:navigateur": "node test/salon-navigateur.mjs && node test/garage-navigateur.mjs",
-    "test": "npm run verifier && npm run test:garage && npm run test:multi"
+    "test": "npm run verifier && npm run test:garage && npm run test:multi && npm run test:gp"
   },
   "engines": {
     "node": ">=20"

@@ -62,6 +62,7 @@
     </div>
     <div class="centre">
       <nav class="menu">
+        <button class="bouton principal" data-action="course-rapide">Course rapide</button>
         <button class="bouton principal" data-action="grand-prix">Grand Prix</button>
         <button class="bouton principal" data-action="contre-la-montre">Contre‑la‑montre</button>
         <button class="bouton" data-action="garage">Garage</button>
@@ -133,6 +134,7 @@
           <div id="salon-voitures" class="choix-voitures"></div>
         </div>
       </div>
+      <div class="panneau" id="salon-championnat" hidden></div>
       <p class="erreur" id="salon-erreur"></p>
       <div class="actions">
         <button class="bouton principal" id="salon-pret">Je suis prêt</button>
@@ -151,9 +153,16 @@
       <span></span>
     </div>
     <div class="centre large">
-      <div class="panneau">
+      <div class="panneau" id="panneau-circuit">
         <h3>Circuit</h3>
         <div class="grille-circuits" id="liste-circuits"></div>
+      </div>
+
+      <div class="panneau" id="panneau-grand-prix" hidden>
+        <h3>Manches du championnat</h3>
+        <ol class="liste-manches" id="liste-manches"></ol>
+        <p class="aide">Les quatre circuits sont enchaînés. Points par manche :
+          10, 8, 6, 5, 4, 3, 2, 1. En cas d'égalité, la dernière course départage.</p>
       </div>
 
       <div class="panneau">
@@ -322,9 +331,11 @@
         </thead>
         <tbody id="resultats-corps"></tbody>
       </table>
+      <div class="panneau" id="resultats-gp" hidden></div>
       <div class="panneau" id="resultats-gains"></div>
       <div class="actions">
-        <button class="bouton principal" data-action="rejouer">Rejouer</button>
+        <button class="bouton principal" data-action="gp-suivant" id="bouton-gp-suivant" hidden>Manche suivante</button>
+        <button class="bouton principal" data-action="rejouer" id="bouton-rejouer">Rejouer</button>
         <button class="bouton" data-action="retour-menu">Menu principal</button>
       </div>
     </div>

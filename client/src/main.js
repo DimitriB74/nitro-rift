@@ -8,6 +8,10 @@ import { GAME_NAME, PHYS, QUALITES, LIBELLES_TOUCHES, CAMERA, COURSE, RESEAU } f
 import { instantane, progressionNormalisee } from '@shared/physics.js';
 import { VOITURES, IDS_VOITURES, PEINTURE_DEPART, niveauxVides } from '@shared/cars.js';
 import { NIVEAUX, IDS_NIVEAUX, tirePseudos, choisitVoiture, ameliorationsBot } from '@shared/bots.js';
+import {
+  creerGrandPrix, enregistreCourse, classementGeneral, circuitCourant,
+  grandPrixTermine, mancheCourante, pointsPourPosition, CIRCUITS_GP
+} from '@shared/grandprix.js';
 
 import { reglages, enregistre, qualiteActive, libelleTouche, reinitialiseTouches } from './reglages.js';
 import { Clavier } from './game/entrees.js';
@@ -79,6 +83,9 @@ class Jeu {
 
     this.meilleursSplits = new Map();  // circuit -> [temps par checkpoint]
     this.meilleurTourSession = new Map();
+
+    /** Championnat en cours, ou `null` hors Grand Prix. */
+    this.gp = null;
 
     window.addEventListener('resize', () => this.redimensionne());
     this.redimensionne();
@@ -166,17 +173,49 @@ class Jeu {
   // -------------------------------------------------------------------------
   // Lancement d'une course
   // -------------------------------------------------------------------------
-  async lanceCourse() {
+  /**
+   * @param {string|null} idCircuit         circuit à charger, `null` = celui des réglages
+   * @param {Array|null}  participantsImposes  liste déjà construite (Grand Prix)
+   */
+  async lanceCourse(idCircuit = null, participantsImposes = null) {
     montre('ecran-chargement');
     document.getElementById('chargement-texte').textContent = 'Construction du circuit…';
     document.getElementById('chargement-barre').style.width = '30%';
 
-    const { circuit, ligne } = await prepare(this.config.circuit);
+    const { circuit, ligne } = await prepare(idCircuit ?? this.config.circuit);
     document.getElementById('chargement-barre').style.width = '70%';
 
     this.construitScene(circuit);
 
-    // --- Participants -------------------------------------------------------
+    // En Grand Prix, les adversaires sont ceux du championnat : mêmes pilotes,
+    // mêmes voitures d'une manche à l'autre, sinon le classement général ne
+    // voudrait rien dire.
+    const participants = participantsImposes ?? this.construitParticipantsSolo(circuit);
+
+    this.course = new Course({
+      circuit, ligne, participants,
+      mode: this.config.mode,
+      tours: this.config.mode === 'contre-la-montre' ? 1 : circuit.tours
+    });
+    this.course.tempsAvantDepartInitial = this.course.tempsAvantDepart;
+
+    this.construitMobiles();
+    this.hud.prepare(this.course);
+    this.cameraPoursuite.replace(this.course.moi.etat);
+
+    this.enPause = false;
+    document.getElementById('voile-pause').hidden = true;
+    this.clavier.videImpulsions();
+    this.dernierBip = -1;
+    this.audio.joueMusique(circuit.decor ?? 'desert');
+    montre('ecran-course');
+  }
+
+  /**
+   * Le joueur, puis les bots. Extrait de `lanceCourse` pour qu'un Grand Prix
+   * puisse figer ses adversaires une fois pour tout le championnat.
+   */
+  construitParticipantsSolo(circuit) {
     const joueur = {
       id: 'moi',
       nom: 'Vous',
@@ -202,24 +241,40 @@ class Jeu {
         niveaux: ameliorationsBot(moyenne, niveau)
       });
     }
+    return participants;
+  }
 
-    this.course = new Course({
-      circuit, ligne, participants,
-      mode: this.config.mode,
-      tours: this.config.mode === 'contre-la-montre' ? 1 : circuit.tours
-    });
-    this.course.tempsAvantDepartInitial = this.course.tempsAvantDepart;
+  // -------------------------------------------------------------------------
+  // Grand Prix solo
+  // -------------------------------------------------------------------------
 
-    this.construitMobiles();
-    this.hud.prepare(this.course);
-    this.cameraPoursuite.replace(this.course.moi.etat);
+  /**
+   * Démarre un championnat sur les quatre circuits.
+   *
+   * Les adversaires sont tirés une seule fois : leurs voitures sont choisies
+   * pour le premier circuit et ne changent plus, comme une écurie engagée pour
+   * la saison entière.
+   */
+  async demarreGrandPrix() {
+    const { circuit } = await prepare(CIRCUITS_GP[0]);
+    const participants = this.construitParticipantsSolo(circuit);
 
-    this.enPause = false;
-    document.getElementById('voile-pause').hidden = true;
-    this.clavier.videImpulsions();
-    this.dernierBip = -1;
-    this.audio.joueMusique(circuit.decor ?? 'desert');
-    montre('ecran-course');
+    this.gp = creerGrandPrix(CIRCUITS_GP, participants);
+    this.gp.participants = participants;
+    this.gp.courses = [];
+
+    await this.lanceMancheGrandPrix();
+  }
+
+  /** Charge le circuit de la manche courante avec les mêmes participants. */
+  async lanceMancheGrandPrix() {
+    await this.lanceCourse(circuitCourant(this.gp), this.gp.participants);
+  }
+
+  /** Bouton « manche suivante » de l'écran de résultats. */
+  async mancheSuivante() {
+    if (!this.gp || grandPrixTermine(this.gp)) return;
+    await this.lanceMancheGrandPrix();
   }
 
   /**
@@ -585,7 +640,7 @@ class Jeu {
   afficheResultatsReseau(resultats) {
     this.course = null;
     this.derniersResultats = resultats;
-    afficheResultatsMulti(resultats, this.reseau.socket.id);
+    afficheResultatsMulti(resultats, this.reseau.socket.id, this.catalogue);
   }
 }
 
@@ -597,8 +652,9 @@ function construitInterface(jeu) {
   // --- Menu principal ------------------------------------------------------
 
   brancheActions(document, {
-    'grand-prix': () => ouvreMode(jeu, 'course', 'Grand Prix'),
-    'contre-la-montre': () => ouvreMode(jeu, 'contre-la-montre', 'Contre-la-montre'),
+    'course-rapide': () => ouvreMode(jeu, 'course', 'Course rapide', false),
+    'grand-prix': () => ouvreMode(jeu, 'course', 'Grand Prix', true),
+    'contre-la-montre': () => ouvreMode(jeu, 'contre-la-montre', 'Contre-la-montre', false),
     'mode-solo': () => ouvreConfig(jeu, jeu.format),
     'mode-multi': async () => {
       const bouton = document.querySelector('[data-action="mode-multi"]');
@@ -626,18 +682,20 @@ function construitInterface(jeu) {
       montre('ecran-garage');
     },
     'classements': () => { jeu.classements.ouvre(); montre('ecran-classements'); },
-    'retour-menu': () => { jeu.course = null; montre('ecran-menu'); },
+    'retour-menu': () => { jeu.course = null; jeu.gp = null; montre('ecran-menu'); },
     'deconnexion': async () => {
       deconnexion();
       jeu.profil = await demandeConnexion(montre);
       majBandeau(jeu.profil);
       montre('ecran-menu');
     },
-    'lancer': () => jeu.lanceCourse(),
+    'lancer': () => (jeu.config.grandPrix ? jeu.demarreGrandPrix() : jeu.lanceCourse()),
     'reprendre': () => jeu.basculePause(),
-    'recommencer': () => jeu.lanceCourse(),
-    'quitter-course': () => jeu.quitteCourse(),
-    'rejouer': () => jeu.lanceCourse(),
+    'recommencer': () => jeu.lanceCourse(jeu.course?.circuit?.id ?? null,
+      jeu.gp ? jeu.gp.participants : null),
+    'quitter-course': () => { jeu.gp = null; jeu.quitteCourse(); },
+    'rejouer': () => (jeu.config.grandPrix ? jeu.demarreGrandPrix() : jeu.lanceCourse()),
+    'gp-suivant': () => jeu.mancheSuivante(),
     'touches-defaut': () => { reinitialiseTouches(); construitParametres(jeu); }
   });
 
@@ -671,17 +729,44 @@ function construitInterface(jeu) {
   champCode.onkeydown = (e) => { if (e.key === 'Enter') rejoindre(); };
 }
 
-function ouvreMode(jeu, format, titre) {
+function ouvreMode(jeu, format, titre, grandPrix = false) {
   jeu.format = format;
   jeu.config.mode = format;
+  jeu.config.grandPrix = grandPrix;
+  jeu.gp = null;
   document.getElementById('mode-titre').textContent = titre;
   montre('ecran-mode');
 }
 
 /** Résultats d'une course en réseau : le classement vient du serveur. */
-function afficheResultatsMulti(resultats, monId) {
-  document.getElementById('resultats-titre').textContent = 'Résultats';
+function afficheResultatsMulti(resultats, monId, catalogue = []) {
+  const gp = resultats.grandPrix ?? null;
+  const nomCircuit = catalogue.find((c) => c.id === resultats.circuit)?.nom ?? '';
+
+  document.getElementById('resultats-titre').textContent = gp
+    ? `Manche ${gp.mancheCourue ?? gp.manche}/${gp.manches} — ${nomCircuit}`
+    : 'Résultats';
   document.getElementById('resultats-gains').textContent = '';
+
+  // Le championnat multijoueur est tenu par le serveur : on affiche son
+  // tableau tel quel, sans recompter les points de notre côté.
+  const blocGp = document.getElementById('resultats-gp');
+  blocGp.hidden = !gp;
+  if (gp) {
+    blocGp.innerHTML = rendTableauGrandPrix(
+      gp.circuits, gp.classement, gp.termine, (l) => l.id === monId);
+    if (!gp.termine) {
+      const prochain = catalogue.find((c) => c.id === gp.prochain)?.nom ?? '';
+      blocGp.insertAdjacentHTML('beforeend',
+        `<p class="aide">Prochaine manche : <b>${echappe(prochain)}</b>. ` +
+        'Retourne au salon et déclare-toi prêt.</p>');
+    }
+  }
+
+  // En réseau, c'est l'hôte qui relance : les boutons de manche solo ne
+  // servent à rien ici.
+  document.getElementById('bouton-gp-suivant').hidden = true;
+  document.getElementById('bouton-rejouer').hidden = true;
 
   document.getElementById('resultats-corps').innerHTML = resultats.classement.map((c) => {
     const temps = c.tempsTotal != null ? formateChrono(c.tempsTotal)
@@ -738,15 +823,35 @@ function brancheActions(racine, actions) {
 
 function ouvreConfig(jeu, mode) {
   jeu.config.mode = mode;
-  document.getElementById('config-titre').textContent =
-    mode === 'contre-la-montre' ? 'Contre‑la‑montre — solo' : 'Course solo';
+  const gp = jeu.config.grandPrix;
+
+  document.getElementById('config-titre').textContent = gp ? 'Grand Prix — solo'
+    : mode === 'contre-la-montre' ? 'Contre‑la‑montre — solo' : 'Course solo';
   document.getElementById('panneau-adversaires').hidden = mode === 'contre-la-montre';
   if (mode === 'contre-la-montre') jeu.config.bots = 0;
 
+  // En Grand Prix, les circuits sont imposés : on montre l'ordre des manches
+  // au lieu du choix du circuit.
+  document.getElementById('panneau-circuit').hidden = gp;
+  document.getElementById('panneau-grand-prix').hidden = !gp;
+  document.querySelector('[data-action="lancer"]').textContent =
+    gp ? 'Lancer le championnat' : 'Lancer la course';
+
+  if (gp) construitListeManches(jeu);
   construitChoixCircuits(jeu);
   construitChoixVoitures(jeu);
   construitReglagesBots(jeu);
   montre('ecran-config');
+}
+
+/** Les quatre manches dans l'ordre, avec leur nombre de tours. */
+function construitListeManches(jeu) {
+  const liste = document.getElementById('liste-manches');
+  liste.innerHTML = CIRCUITS_GP.map((id) => {
+    const c = jeu.catalogue.find((x) => x.id === id);
+    return `<li><b>${echappe(c?.nom ?? id)}</b>` +
+      `<small>${c ? `${c.tours} tours · ${c.longueur} m` : ''}</small></li>`;
+  }).join('');
 }
 
 function construitChoixCircuits(jeu) {
@@ -881,8 +986,18 @@ function afficheResultats(jeu) {
   const course = jeu.course;
   const resultats = course.resultats();
 
-  document.getElementById('resultats-titre').textContent =
-    `${course.circuit.nom} — résultats`;
+  // Le championnat encaisse les points avant l'affichage : le tableau général
+  // doit déjà tenir compte de la manche qu'on vient de finir.
+  const gp = jeu.gp;
+  if (gp) {
+    enregistreCourse(gp, resultats.map((r) => ({
+      id: r.id, position: r.position, meilleurTour: r.meilleurTour,
+    })));
+  }
+
+  document.getElementById('resultats-titre').textContent = gp
+    ? `Manche ${Math.min(gp.index, gp.circuits.length)}/${gp.circuits.length} — ${course.circuit.nom}`
+    : `${course.circuit.nom} — résultats`;
 
   const corps = document.getElementById('resultats-corps');
   corps.innerHTML = resultats.map((r) => {
@@ -910,7 +1025,103 @@ function afficheResultats(jeu) {
     ligneStat('Réapparitions', moi.stats.reapparitions) +
     '<div id="resultats-credits"></div>';
 
+  afficheTableauGrandPrix(jeu, moi);
   envoieResultat(jeu, course, resultats, moi);
+}
+
+/**
+ * Tableau du championnat sous les résultats de la manche, et boutons adaptés :
+ * « manche suivante » tant qu'il en reste, « rejouer » à la fin.
+ */
+function afficheTableauGrandPrix(jeu, moi) {
+  const bloc = document.getElementById('resultats-gp');
+  const suivant = document.getElementById('bouton-gp-suivant');
+  const rejouer = document.getElementById('bouton-rejouer');
+  const gp = jeu.gp;
+
+  if (!gp) {
+    bloc.hidden = true;
+    suivant.hidden = true;
+    rejouer.hidden = false;
+    rejouer.textContent = 'Rejouer';
+    return;
+  }
+
+  const fini = grandPrixTermine(gp);
+  bloc.hidden = false;
+  bloc.innerHTML = rendTableauGrandPrix(
+    gp.circuits, classementGeneral(gp), fini, (l) => l.humain);
+
+  suivant.hidden = fini;
+  rejouer.hidden = !fini;
+  if (!fini) {
+    const prochain = jeu.catalogue.find((c) => c.id === circuitCourant(gp));
+    suivant.textContent = `Manche ${gp.index + 1} : ${prochain?.nom ?? ''}`;
+  } else {
+    rejouer.textContent = 'Rejouer le championnat';
+    envoieResultatGrandPrix(jeu);
+  }
+}
+
+/**
+ * Tableau commun au solo et au multijoueur.
+ *
+ * @param {string[]} circuits   identifiants des manches, dans l'ordre
+ * @param {Array}    classement lignes déjà triées, avec place, nom, positions, points
+ * @param {boolean}  fini       championnat terminé
+ * @param {Function} estMoi     (ligne) -> booléen, pour surligner le joueur
+ */
+function rendTableauGrandPrix(circuits, classement, fini, estMoi) {
+  const colonnes = (circuits ?? []).map((_, i) => `M${i + 1}`);
+
+  const lignes = classement.map((l) => {
+    const cases = colonnes.map((_, i) => {
+      const pos = l.positions?.[i];
+      return `<td class="temps">${pos == null ? '—'
+        : `${pos}<small style="opacity:.55"> +${pointsPourPosition(pos)}</small>`}</td>`;
+    }).join('');
+    return `<tr class="${estMoi(l) ? 'moi' : ''}">` +
+      `<td>${l.place}</td><td>${echappe(l.nom ?? l.pseudo ?? '')}</td>${cases}` +
+      `<td class="temps"><b>${l.points}</b></td></tr>`;
+  }).join('');
+
+  return `<h3>${fini ? 'Classement final du championnat' : 'Classement du championnat'}</h3>` +
+    '<table class="tableau-resultats compact"><thead><tr><th>#</th><th>Pilote</th>' +
+    colonnes.map((n) => `<th>${n}</th>`).join('') +
+    '<th>Pts</th></tr></thead><tbody>' + lignes + '</tbody></table>';
+}
+
+/** Bonus de fin de championnat : c'est le serveur qui verse les crédits. */
+async function envoieResultatGrandPrix(jeu) {
+  if (!jeu.profil || !jeu.gp) return;
+
+  const classement = classementGeneral(jeu.gp);
+  const moi = classement.find((l) => l.humain);
+  if (!moi) return;
+
+  const adversaires = classement
+    .filter((l) => l !== moi)
+    .map((l) => (l.bot ? { type: 'bot', niveau: jeu.config.niveau } : { type: 'humain' }));
+
+  try {
+    const reponse = await fetch('/api/grand-prix/resultat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${jetonActuel()}` },
+      body: JSON.stringify({ position: moi.place, adversaires }),
+    });
+    const data = await reponse.json();
+    if (!reponse.ok) throw new Error(data.erreur ?? 'Erreur serveur');
+
+    jeu.profil = data.profil;
+    majBandeau(data.profil);
+    if (data.gains > 0) {
+      document.getElementById('resultats-gp').insertAdjacentHTML('beforeend',
+        ligneStat(`<b>Bonus du championnat (${ordinal(moi.place)})</b>`, `<b>+${data.gains} ¤</b>`));
+    }
+  } catch (e) {
+    document.getElementById('resultats-gp').insertAdjacentHTML('beforeend',
+      `<p class="erreur">Bonus non enregistré : ${echappe(e.message)}</p>`);
+  }
 }
 
 /**

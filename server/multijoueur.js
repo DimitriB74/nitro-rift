@@ -19,6 +19,10 @@ import {
   ajouteBot, ajouteHumain, creerSalon, estHote, nettoieSalons, retireBot, retireHumain,
   salonPublic, salons, supprimeSalon, totalParticipants, tousPrets,
 } from './rooms.js';
+import {
+  ajouteParticipants, circuitCourant, creerGrandPrix, enregistreCourse,
+  grandPrixPublic, grandPrixTermine, mancheCourante, retireParticipant,
+} from '../shared/grandprix.js';
 import { meilleurTour } from '../scripts/simulation.js';
 import { NIVEAU_MAX } from '../shared/cars.js';
 
@@ -48,6 +52,57 @@ function calculeReferences() {
 }
 
 const erreur = (socket, message) => socket.emit('salon:erreur', { message });
+
+/** Participants d'un salon, sous la forme attendue par le module Grand Prix. */
+function inscrits(salon) {
+  return [...salon.humains.values()].map((h) => ({
+    id: h.id, nom: h.pseudo, humain: true, bot: false, voiture: h.voiture,
+  })).concat(salon.bots.map((b) => ({
+    id: b.id, nom: b.pseudo, humain: false, bot: true, voiture: b.voiture,
+  })));
+}
+
+/**
+ * Prépare la manche à venir : crée le championnat au premier lancement, en
+ * ouvre un nouveau quand le précédent est allé au bout, et cale le circuit du
+ * salon sur la manche courante.
+ */
+function prepareGrandPrix(salon) {
+  if (!salon.grandPrix || grandPrixTermine(salon.grandPrix)) {
+    salon.grandPrix = creerGrandPrix(COURSE.grandPrix, inscrits(salon));
+  } else {
+    // Quelqu'un a pu arriver entre deux manches : il court, mais à zéro point.
+    ajouteParticipants(salon.grandPrix, inscrits(salon));
+  }
+  salon.circuit = circuitCourant(salon.grandPrix) ?? COURSE.grandPrix[0];
+}
+
+/**
+ * Compte les points d'une manche et complète la charge des résultats.
+ *
+ * Appelée par la course juste avant la diffusion : le client reçoit donc le
+ * classement de la manche et celui du championnat dans le même message.
+ */
+function compteManche(salon, charge) {
+  const gp = salon.grandPrix;
+  if (!gp) return;
+
+  const courue = mancheCourante(gp);
+
+  enregistreCourse(gp, charge.classement.map((c) => ({
+    id: c.id,
+    position: c.place,
+    meilleurTour: c.meilleurTour,
+  })));
+
+  // La manche suivante est annoncée dès maintenant : le salon affiche le bon
+  // circuit sans attendre un autre message.
+  if (!grandPrixTermine(gp)) salon.circuit = circuitCourant(gp);
+
+  // `manche` désigne la prochaine à courir ; l'écran de résultats a besoin de
+  // celle qui vient de se terminer.
+  charge.grandPrix = { ...grandPrixPublic(gp), mancheCourue: courue };
+}
 
 export function brancheMultijoueur(serveurHttp) {
   const io = new Server(serveurHttp, {
@@ -146,8 +201,18 @@ export function brancheMultijoueur(serveurHttp) {
       if (!salon || !estHote(salon, socket.id)) return;
       if (salon.phase === 'course') return;
 
-      if (['course', 'grand-prix', 'contre-la-montre'].includes(reglages.mode)) salon.mode = reglages.mode;
-      if (ORDRE.includes(reglages.circuit)) salon.circuit = reglages.circuit;
+      if (['course', 'grand-prix', 'contre-la-montre'].includes(reglages.mode)
+          && reglages.mode !== salon.mode) {
+        salon.mode = reglages.mode;
+        // Changer de mode remet le championnat à zéro : on ne mélange pas les
+        // points d'un Grand Prix abandonné avec ceux du suivant.
+        salon.grandPrix = null;
+        if (salon.mode === 'grand-prix') salon.circuit = COURSE.grandPrix[0];
+      }
+      // En Grand Prix, l'ordre des manches est fixé : l'hôte ne choisit pas.
+      if (salon.mode !== 'grand-prix' && ORDRE.includes(reglages.circuit)) {
+        salon.circuit = reglages.circuit;
+      }
       if (Number.isInteger(reglages.tours) && reglages.tours >= 1 && reglages.tours <= 10) {
         salon.tours = reglages.tours;
       }
@@ -211,6 +276,8 @@ export function brancheMultijoueur(serveurHttp) {
       if (salon.phase === 'course') return;
       if (!tousPrets(salon)) return erreur(socket, "Tout le monde n'est pas prêt");
 
+      if (salon.mode === 'grand-prix') prepareGrandPrix(salon);
+
       let circuit;
       try {
         circuit = chargeCircuit(salon.circuit);
@@ -222,6 +289,7 @@ export function brancheMultijoueur(serveurHttp) {
         salon, circuit, ligneCourse(salon.circuit),
         (evenement, charge) => io.to(salon.code).emit(evenement, charge),
         referenceTour.get(salon.circuit) ?? 0,
+        salon.mode === 'grand-prix' ? (charge) => compteManche(salon, charge) : null,
       );
       salon.course.demarrer();
     });
@@ -247,6 +315,13 @@ export function brancheMultijoueur(serveurHttp) {
       socket.data.code = null;
 
       const suite = retireHumain(salon, socket.id);
+
+      // Un joueur parti avant d'avoir marqué le moindre point sort du tableau ;
+      // s'il en a, sa ligne reste, pour que le classement garde un sens.
+      if (salon.grandPrix) {
+        const ligne = salon.grandPrix.lignes.find((l) => l.id === socket.id);
+        if (ligne && ligne.points === 0) retireParticipant(salon.grandPrix, socket.id);
+      }
 
       if (suite.salonVide) {
         salon.course?.arrete();
