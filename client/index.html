@@ -20,6 +20,36 @@
     </div>
   </section>
 
+
+  <!-- ===================================================================== -->
+  <!-- Connexion / inscription                                               -->
+  <!-- ===================================================================== -->
+  <section class="ecran" id="ecran-connexion">
+    <div class="centre">
+      <h1 class="titre-jeu" data-nom-jeu></h1>
+      <p class="sous-titre">Connecte-toi pour retrouver tes crédits, tes voitures et tes records.</p>
+
+      <div class="panneau formulaire">
+        <div class="segments" id="auth-onglets">
+          <button class="segment actif" data-onglet="connexion">Connexion</button>
+          <button class="segment" data-onglet="inscription">Créer un compte</button>
+        </div>
+
+        <label for="auth-pseudo">Pseudo</label>
+        <input id="auth-pseudo" maxlength="16" autocomplete="username" spellcheck="false">
+
+        <label for="auth-mdp">Mot de passe</label>
+        <input id="auth-mdp" type="password" autocomplete="current-password">
+
+        <p class="aide" id="auth-aide">3 à 16 caractères pour le pseudo, 6 minimum pour le mot de passe.</p>
+        <p class="erreur" id="auth-erreur"></p>
+
+        <button class="bouton principal" id="auth-valider">Se connecter</button>
+        <button class="bouton discret" id="auth-invite">Jouer sans compte</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ===================================================================== -->
   <!-- Menu principal                                                        -->
   <!-- ===================================================================== -->
@@ -37,6 +67,7 @@
         <button class="bouton" data-action="garage" disabled>Garage <small>(étape 10)</small></button>
         <button class="bouton" data-action="classements" disabled>Classements <small>(étape 10)</small></button>
         <button class="bouton" data-action="parametres">Paramètres</button>
+        <button class="bouton discret" data-action="deconnexion" id="bouton-deconnexion" hidden>Déconnexion</button>
       </nav>
       <p class="note" id="note-menu"></p>
     </div>

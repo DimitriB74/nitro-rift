@@ -316,3 +316,56 @@ html, body {
 .ligne-gain { display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; }
 .ligne-gain.total { border-top: 1px solid var(--bord); margin-top: 8px; padding-top: 10px; font-weight: 700; font-size: 16px; }
 .ligne-gain .detail { color: var(--texte-doux); font-size: 12px; margin-left: 8px; }
+
+/* --------------------------------------------------------------------------
+   Connexion / inscription
+   -------------------------------------------------------------------------- */
+.formulaire {
+  width: min(92vw, 380px);
+  margin: 22px auto 0;
+  text-align: left;
+}
+
+.formulaire label {
+  display: block;
+  margin: 14px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--texte-doux, #8791a0);
+}
+
+.formulaire input {
+  width: 100%;
+  padding: 10px 12px;
+  font: 15px inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+
+.formulaire input:focus {
+  outline: 2px solid var(--accent, #f0a13c);
+  outline-offset: 1px;
+}
+
+.formulaire .bouton { width: 100%; margin-top: 16px; }
+
+.aide { margin-top: 12px; font-size: 11.5px; line-height: 1.5; color: #7f8892; }
+
+.erreur {
+  min-height: 17px;
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: #ff8b4a;
+}
+
+.bouton.discret {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--texte-doux, #98a1ab);
+  font-weight: 500;
+}
+
+.bouton.discret:hover { background: rgba(255, 255, 255, 0.07); }

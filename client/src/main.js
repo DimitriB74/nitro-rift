@@ -17,6 +17,8 @@ import { construitPiste, detruitPiste } from './render/piste.js';
 import { creerVoiture, chargeModele, orienteVoiture, animeRoues, ajusteTransparence } from './render/voiture.js';
 import { CameraPoursuite } from './render/camera.js';
 import { Hud, formateChrono, echappe, nomVoiture } from './ui/hud.js';
+import { demandeConnexion, majBandeau } from './ui/auth.js';
+import { deconnexion, reprendSession } from './net/api.js';
 
 // ---------------------------------------------------------------------------
 // Écrans
@@ -98,8 +100,18 @@ class Jeu {
 
     avance(100, 'Prêt.');
     construitInterface(this);
-    montre('ecran-menu');
+
+    // On boucle le rendu tout de suite : l'écran de connexion se superpose au
+    // canvas, et la scène reste animée derrière.
     this.boucle(performance.now());
+
+    // Reprise de session si un jeton valide traîne en localStorage, sinon on
+    // demande de se connecter. Le mode invité rend null et reste jouable.
+    this.profil = await reprendSession();
+    if (!this.profil) this.profil = await demandeConnexion(montre);
+
+    majBandeau(this.profil);
+    montre('ecran-menu');
   }
 
   /**
@@ -365,6 +377,12 @@ function construitInterface(jeu) {
     'contre-la-montre': () => ouvreConfig(jeu, 'contre-la-montre'),
     'parametres': () => { construitParametres(jeu); montre('ecran-parametres'); },
     'retour-menu': () => { jeu.course = null; montre('ecran-menu'); },
+    'deconnexion': async () => {
+      deconnexion();
+      jeu.profil = await demandeConnexion(montre);
+      majBandeau(jeu.profil);
+      montre('ecran-menu');
+    },
     'lancer': () => jeu.lanceCourse(),
     'reprendre': () => jeu.basculePause(),
     'recommencer': () => jeu.lanceCourse(),

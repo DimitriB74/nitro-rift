@@ -12,6 +12,9 @@ import { fileURLToPath } from 'node:url';
 
 import { catalogue, DOSSIER_CIRCUITS, circuit } from './circuits.js';
 import { GAME_NAME, VERSION } from '../shared/config.js';
+import { baseConnectee, connecterBase } from './db.js';
+import { brancheAuth } from './auth.js';
+import { brancheAdmin } from './admin.js';
 
 const ICI = path.dirname(fileURLToPath(import.meta.url));
 const RACINE = path.join(ICI, '..');
@@ -19,6 +22,10 @@ const DIST = path.join(RACINE, 'dist');
 
 const app = express();
 app.disable('x-powered-by');
+// Render place le service derrière un proxy : sans cela, req.ip vaudrait
+// toujours l'adresse du proxy et la limitation des tentatives de connexion
+// s'appliquerait à tout le monde d'un coup.
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '256kb' }));
 
 // ---------------------------------------------------------------------------
@@ -33,9 +40,15 @@ app.get('/health', (req, res) => {
     jeu: GAME_NAME,
     version: VERSION,
     demarreDepuis: Math.round(process.uptime()),
-    base: 'non-connectee'
+    base: baseConnectee() ? 'mongodb' : 'memoire'
   });
 });
+
+// ---------------------------------------------------------------------------
+// Comptes et administration
+// ---------------------------------------------------------------------------
+brancheAuth(app);
+brancheAdmin(app);
 
 // ---------------------------------------------------------------------------
 // Circuits
@@ -61,7 +74,8 @@ app.use('/circuits', express.static(DOSSIER_CIRCUITS, {
 if (fs.existsSync(DIST)) {
   app.use(express.static(DIST, { maxAge: '1h' }));
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api/') || req.path.startsWith('/circuits/')) return next();
+        if (req.path.startsWith('/api/') || req.path.startsWith('/circuits/')
+          || req.path.startsWith('/admin')) return next();
     res.sendFile(path.join(DIST, 'index.html'));
   });
 } else {
@@ -79,6 +93,10 @@ if (fs.existsSync(DIST)) {
 // Démarrage
 // ---------------------------------------------------------------------------
 const PORT = process.env.PORT || 3000;
+
+// On tente la base AVANT d'écouter : ainsi /health dit la vérité dès la
+// première requête, et le client n'affiche pas un état faux au réveil.
+await connecterBase(process.env.MONGODB_URI);
 
 const serveur = app.listen(PORT, () => {
   console.log(`  ${GAME_NAME} ${VERSION}`);
