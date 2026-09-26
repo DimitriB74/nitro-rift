@@ -64,17 +64,22 @@ for (const id of ORDRE) {
 }
 
 console.log('\n=== Chaque voiture boucle chaque circuit ===');
-for (const idVoiture of IDS_VOITURES) {
-  let toutes = true;
-  const details = [];
-  for (const id of ORDRE) {
-    const r = simuleBot(circuit(id), ligneCourse(id), {
-      voiture: idVoiture, niveaux: niveauxVides(), niveau: 'moyen', tours: 1, tempsMax: 200,
-    });
-    if (!r.termine) toutes = false;
-    details.push(`${id} ${r.termine ? formateTemps(r.tempsTours[0]) : 'BLOQUÉ'}`);
+// Aux deux extrêmes : un bot moyen, qui roule en dessous des limites, et un bot
+// difficile, qui s'en approche. C'est le second qui trouve les virages relevés
+// où une voiture moins accrocheuse que la favorite du circuit part au décor.
+for (const niveau of ['moyen', 'difficile']) {
+  for (const idVoiture of IDS_VOITURES) {
+    let toutes = true;
+    const details = [];
+    for (const id of ORDRE) {
+      const r = simuleBot(circuit(id), ligneCourse(id, idVoiture), {
+        voiture: idVoiture, niveaux: niveauxVides(), niveau, tours: 1, tempsMax: 200,
+      });
+      if (!r.termine) toutes = false;
+      details.push(`${id} ${r.termine ? formateTemps(r.tempsTours[0]) : 'BLOQUÉ'}`);
+    }
+    verifie(`${VOITURES[idVoiture].nom} passe partout (bot ${niveau})`, toutes, details.join(' · '));
   }
-  verifie(`${VOITURES[idVoiture].nom} passe partout`, toutes, details.join(' · '));
 }
 
 console.log(`\n${ok}/${ok + ko} vérifications passées`);

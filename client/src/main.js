@@ -207,7 +207,7 @@ class Jeu {
     document.getElementById('chargement-texte').textContent = 'Construction du circuit…';
     document.getElementById('chargement-barre').style.width = '30%';
 
-    const { circuit, ligne } = await prepare(idCircuit ?? this.config.circuit);
+    const { circuit, ligne, lignePour } = await prepare(idCircuit ?? this.config.circuit);
     document.getElementById('chargement-barre').style.width = '70%';
 
     this.construitScene(circuit);
@@ -220,7 +220,7 @@ class Jeu {
     const contreLaMontre = this.config.mode === 'contre-la-montre';
 
     this.course = new Course({
-      circuit, ligne, participants,
+      circuit, ligne, lignePour, participants,
       mode: this.config.mode,
       tours: contreLaMontre ? COURSE.toursContreLaMontre : circuit.tours
     });
@@ -402,7 +402,7 @@ class Jeu {
     document.getElementById('chargement-texte').textContent = 'Construction du circuit…';
     document.getElementById('chargement-barre').style.width = '30%';
 
-    const { circuit, ligne } = await prepare(depart.circuit);
+    const { circuit, ligne, lignePour } = await prepare(depart.circuit);
     document.getElementById('chargement-barre').style.width = '70%';
     this.construitScene(circuit);
 
@@ -424,7 +424,7 @@ class Jeu {
     const session = depart.mode === 'contre-la-montre';
 
     this.course = new Course({
-      circuit, ligne, participants,
+      circuit, ligne, lignePour, participants,
       mode: depart.mode ?? 'course',
       tours: depart.tours,
       session,

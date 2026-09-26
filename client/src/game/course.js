@@ -23,6 +23,12 @@ export class Course {
   constructor(o) {
     this.circuit = o.circuit;
     this.ligne = o.ligne;
+    /**
+     * Ligne de course adaptée à une voiture. Les vitesses cibles dépendent de
+     * l'adhérence : un pilote automatique au volant d'une voiture moins
+     * accrocheuse que la favorite du circuit sortirait à chaque virage relevé.
+     */
+    this.lignePour = o.lignePour ?? (() => this.ligne);
     this.mode = o.mode ?? 'course';
     this.tours = o.tours ?? this.circuit.tours;
 
@@ -65,7 +71,7 @@ export class Course {
       // Un pilote automatique est préparé pour tout le monde, humains compris :
       // il sert au réglage et, en multijoueur, à reprendre la voiture d'un
       // joueur déconnecté jusqu'à la fin de la course.
-      bot: creerBot(this.circuit, this.ligne, p.niveau ?? 'moyen', 1000 + rang * 977),
+      bot: creerBot(this.circuit, this.lignePour(p.voiture), p.niveau ?? 'moyen', 1000 + rang * 977),
       pilotageAuto: false,
       arrive: false,
       abandonne: false,
@@ -249,7 +255,8 @@ export class Course {
   /** Confie la voiture d'un participant à un bot (déconnexion, réglage). */
   confieABot(participant, niveau = 'moyen') {
     participant.pilotageAuto = true;
-    participant.bot = creerBot(this.circuit, this.ligne, niveau, 1000 + participant.rang * 977);
+    participant.bot = creerBot(
+      this.circuit, this.lignePour(participant.voiture), niveau, 1000 + participant.rang * 977);
   }
 
   /** Écart de temps ou de distance avec le participant qui précède. */

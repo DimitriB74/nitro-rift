@@ -18,7 +18,10 @@ const chrono = (t) => (Number.isFinite(t)
   : '   —    ');
 
 /** Meilleur tour lancé, en gardant la meilleure des graines. */
-function meilleurSurCircuit(circuit, ligne, voiture, niveaux) {
+function meilleurSurCircuit(circuit, voiture, niveaux) {
+  // Chaque voiture roule sur la ligne calculée pour elle : une ligne prévue
+  // pour une autre l'enverrait au décor dans les virages relevés.
+  const ligne = ligneCourse(circuit.id, voiture);
   let meilleur = Infinity;
   for (const graine of GRAINES) {
     const r = meilleurTour(circuit, ligne, { voiture, niveaux, niveau: 'difficile', graine, tempsMax: 400 });
@@ -42,8 +45,7 @@ const tout = [];
 
 for (const id of ORDRE) {
   const circuit = chargeCircuit(id);
-  const ligne = ligneCourse(id);
-  const temps = IDS_VOITURES.map((v) => meilleurSurCircuit(circuit, ligne, v, niveaux));
+  const temps = IDS_VOITURES.map((v) => meilleurSurCircuit(circuit, v, niveaux));
 
   const valides = temps.filter(Number.isFinite);
   const min = Math.min(...valides);

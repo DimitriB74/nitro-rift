@@ -47,10 +47,11 @@ export class CourseServeur {
    * @param {Function} [apresFin] appelée avec la charge des résultats juste avant
    *                             leur diffusion, et libre de l'enrichir (Grand Prix)
    */
-  constructor(salon, circuit, ligne, diffuser, reference, apresFin = null) {
+  constructor(salon, circuit, ligne, diffuser, reference, apresFin = null, lignePour = null) {
     this.salon = salon;
     this.circuit = circuit;
     this.ligne = ligne;
+    this.lignePour = lignePour ?? (() => ligne);
     this.diffuser = diffuser;
     this.tempsReference = reference ?? 0;
     this.apresFin = apresFin;
@@ -105,7 +106,8 @@ export class CourseServeur {
       this.bots.push({
         ref: bot,
         etat,
-        cerveau: creerBot(this.circuit, this.ligne, bot.niveau, 1 + bot.rang * 17),
+        // Chaque bot suit la ligne calculée pour SA voiture.
+        cerveau: creerBot(this.circuit, this.lignePour(bot.voiture), bot.niveau, 1 + bot.rang * 17),
       });
       bot.resultat = null;
       bot.meilleurTour = null;

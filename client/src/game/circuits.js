@@ -35,16 +35,29 @@ export async function chargeCircuit(id) {
   return circuit;
 }
 
-/** Ligne de course du circuit, calculée avec sa voiture favorite. */
-export function ligneCourse(circuit) {
-  if (!lignes.has(circuit.id)) {
-    lignes.set(circuit.id, construireLigneCourse(circuit, parametresVoiture(circuit.voitureFavorite)));
+/**
+ * Ligne de course d'un circuit, pour une voiture donnée.
+ *
+ * Les vitesses cibles dépendent de l'adhérence et de la maniabilité de la
+ * voiture : une ligne calculée pour la voiture favorite envoie les autres au
+ * décor dans les virages relevés rapides. On en garde donc une par voiture.
+ */
+export function ligneCourse(circuit, voiture = null) {
+  const choisie = voiture ?? circuit.voitureFavorite;
+  const cle = `${circuit.id}:${choisie}`;
+  if (!lignes.has(cle)) {
+    lignes.set(cle, construireLigneCourse(circuit, parametresVoiture(choisie)));
   }
-  return lignes.get(circuit.id);
+  return lignes.get(cle);
 }
 
 /** Charge circuit et ligne de course en une fois. */
 export async function prepare(id) {
   const circuit = await chargeCircuit(id);
-  return { circuit, ligne: ligneCourse(circuit) };
+  return {
+    circuit,
+    ligne: ligneCourse(circuit),
+    /** Ligne adaptée à une voiture précise, pour les pilotes automatiques. */
+    lignePour: (voiture) => ligneCourse(circuit, voiture),
+  };
 }

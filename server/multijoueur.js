@@ -343,6 +343,7 @@ export function brancheMultijoueur(serveurHttp) {
         (evenement, charge) => io.to(salon.code).emit(evenement, charge),
         referenceTour.get(salon.circuit) ?? 0,
         salon.mode === 'grand-prix' ? (charge) => compteManche(salon, charge) : null,
+        (voiture) => ligneCourse(salon.circuit, voiture),
       );
       salon.course.demarrer();
     });

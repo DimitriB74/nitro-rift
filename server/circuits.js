@@ -37,16 +37,21 @@ export function circuit(id) {
 }
 
 /**
- * Ligne de course du circuit, calculée avec la voiture favorite au niveau 0.
- * Elle est partagée par tous les bots, chaque difficulté n'en exploitant qu'une
- * fraction.
+ * Ligne de course d'un circuit, pour une voiture donnée.
+ *
+ * Les vitesses cibles dépendent de l'adhérence et de la maniabilité : une ligne
+ * calculée pour la voiture favorite envoie les voitures moins accrocheuses dans
+ * le décor à chaque virage relevé rapide. Une ligne par voiture, donc, mise en
+ * cache — il n'y en a que quatre par circuit.
  */
-export function ligneCourse(id) {
-  if (!lignes.has(id)) {
-    const c = circuit(id);
-    lignes.set(id, construireLigneCourse(c, parametresVoiture(c.voitureFavorite)));
+export function ligneCourse(id, voiture = null) {
+  const c = circuit(id);
+  const choisie = voiture ?? c.voitureFavorite;
+  const cle = `${id}:${choisie}`;
+  if (!lignes.has(cle)) {
+    lignes.set(cle, construireLigneCourse(c, parametresVoiture(choisie)));
   }
-  return lignes.get(id);
+  return lignes.get(cle);
 }
 
 /** Métadonnées légères, pour les menus et les classements. */

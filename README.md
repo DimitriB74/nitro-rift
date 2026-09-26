@@ -86,7 +86,8 @@ amélioration. Le meilleur tour classe, pas la position sur la piste.
 | `npm run build` | construit le client dans `/dist` |
 | `npm start` | serveur de production (sert `/dist`) |
 | `npm test` | toutes les vérifications sans navigateur (≈ 140) |
-| `npm run verifier` | 24 contrôles sans affichage : circuits, bots, voitures |
+| `npm run verifier` | 28 contrôles sans affichage : circuits, bots, voitures |
+| `npm run comparer` | compare les 4 voitures sur les 4 circuits |
 | `npm run test:multi` | 22 contrôles du multijoueur avec de vrais clients réseau |
 | `npm run test:garage` | 18 contrôles de l'économie et du garage |
 | `npm run test:gp` | 23 contrôles du Grand Prix, dont un championnat complet |
@@ -251,9 +252,11 @@ Reste à faire, si tu veux aller plus loin :
 
 - **de vrais assets** — modèles de voitures, HDRI et sons, à la place de ce que
   le code génère (voir la section précédente) ;
-- **la Montagne enneigée** tourne en 1 min 03 au meilleur tour, un peu au-dessus
-  des 40 à 60 s des trois autres circuits, et son tracé récompense surtout la
-  maniabilité : les quatre voitures y font des temps proches, alors qu'ailleurs
-  la Tempête et la Comète se détachent. `npm run comparer` chiffre l'écart ;
+- **le Stade futuriste et la Montagne enneigée** ne séparent pas les voitures :
+  moins d'une demi-seconde entre la meilleure et la pire, contre 3 à 4 s au
+  Canyon et à la Ville, où la Tempête et la Vipère se détachent comme prévu. Le
+  choix de la voiture n'y change presque rien. La Montagne tourne aussi en
+  1 min 03, un peu au-dessus des 40 à 60 s visées. `npm run comparer` chiffre
+  tout ça ;
 - **jouer sur téléphone** : l'interface s'adapte, mais il n'y a pas de commandes
   tactiles.
