@@ -4,7 +4,8 @@
 
 import * as THREE from 'three';
 
-import { GAME_NAME, PHYS, QUALITES, LIBELLES_TOUCHES, CAMERA, COURSE } from '@shared/config.js';
+import { GAME_NAME, PHYS, QUALITES, LIBELLES_TOUCHES, CAMERA, COURSE, RESEAU } from '@shared/config.js';
+import { instantane, progressionNormalisee } from '@shared/physics.js';
 import { VOITURES, IDS_VOITURES, PEINTURE_DEPART, niveauxVides } from '@shared/cars.js';
 import { NIVEAUX, IDS_NIVEAUX, tirePseudos, choisitVoiture, ameliorationsBot } from '@shared/bots.js';
 
@@ -19,6 +20,8 @@ import { CameraPoursuite } from './render/camera.js';
 import { Hud, formateChrono, echappe, nomVoiture } from './ui/hud.js';
 import { demandeConnexion, majBandeau } from './ui/auth.js';
 import { deconnexion, reprendSession } from './net/api.js';
+import { Reseau, TamponDistant } from './net/socket.js';
+import { EcranSalon } from './ui/salon.js';
 
 // ---------------------------------------------------------------------------
 // Écrans
@@ -39,6 +42,11 @@ document.title = GAME_NAME;
 class Jeu {
   constructor() {
     this.canvas = document.getElementById('scene');
+    this.reseau = null;
+    this.salonUi = null;
+    this.tampon = new TamponDistant();
+    this.derniereEmission = 0;
+    this.arriveeAnnoncee = false;
     this.rendu = creerRendu(this.canvas);
     this.clavier = new Clavier();
     this.hud = new Hud();
@@ -190,6 +198,99 @@ class Jeu {
     montre('ecran-course');
   }
 
+  /**
+   * Course en réseau.
+   *
+   * Différences avec le solo : les autres voitures sont marquées « distant »
+   * (leur état vient du serveur, on ne les simule pas), et le compte à rebours
+   * est calé sur l'heure de départ annoncée par le serveur, convertie dans
+   * l'horloge locale grâce au décalage mesuré.
+   */
+  async lanceCourseReseau(depart) {
+    montre('ecran-chargement');
+    document.getElementById('chargement-texte').textContent = 'Construction du circuit…';
+    document.getElementById('chargement-barre').style.width = '30%';
+
+    const { circuit, ligne } = await prepare(depart.circuit);
+    document.getElementById('chargement-barre').style.width = '70%';
+    this.construitScene(circuit);
+
+    const monId = this.reseau.socket.id;
+    const participants = depart.grille
+      .slice()
+      .sort((a, b) => a.rang - b.rang)
+      .map((p) => ({
+        id: p.id,
+        nom: p.pseudo,
+        humain: p.id === monId,
+        distant: p.id !== monId,
+        voiture: p.voiture,
+        peinture: p.peinture,
+        niveaux: niveauxVides(),
+        niveau: 'moyen',
+      }));
+
+    this.course = new Course({
+      circuit, ligne, participants, mode: 'course', tours: depart.tours,
+    });
+    this.course.reseau = true;
+
+    // Le serveur annonce une heure absolue. On la ramène dans notre horloge :
+    // tout le monde voit donc « 3, 2, 1, partez » au même instant réel.
+    const departLocal = depart.heureDepart - this.reseau.decalage;
+    this.course.tempsAvantDepart = Math.max(0, (departLocal - Date.now()) / 1000);
+    this.course.tempsAvantDepartInitial = this.course.tempsAvantDepart;
+
+    this.tampon.vide();
+    this.derniereEmission = 0;
+    this.arriveeAnnoncee = false;
+
+    this.construitMobiles();
+    this.hud.prepare(this.course);
+    this.cameraPoursuite.replace(this.course.moi.etat);
+
+    this.enPause = false;
+    document.getElementById('voile-pause').hidden = true;
+    this.clavier.videImpulsions();
+    montre('ecran-course');
+  }
+
+  /** Envoi de notre état et application de celui des autres. */
+  majReseau() {
+    const course = this.course;
+    if (!course?.reseau || !this.reseau?.connecte) return;
+
+    // Émission à la fréquence prévue, pas à celle de l'écran.
+    const maintenant = performance.now();
+    if (maintenant - this.derniereEmission >= 1000 / RESEAU.hzClient) {
+      this.derniereEmission = maintenant;
+      const moi = course.moi;
+      this.reseau.envoyerEtat({
+        ...instantane(moi.etat),
+        s: progressionNormalisee(moi.etat, course.circuit),
+      });
+    }
+
+    // Les autres voitures sont affichées dans un léger passé, où l'on dispose
+    // toujours de deux instantanés à interpoler.
+    const t = this.reseau.maintenantServeur;
+    for (const p of course.participants) {
+      if (!p.distant) continue;
+      const echantillon = this.tampon.echantillon(p.id, t);
+      if (echantillon) course.appliqueEtatDistant(p.id, echantillon);
+    }
+
+    // Notre arrivée est annoncée une seule fois : le chrono vient de notre
+    // machine, le serveur ne fait que vérifier qu'il est plausible.
+    if (course.moi.arrive && !this.arriveeAnnoncee) {
+      this.arriveeAnnoncee = true;
+      this.reseau.annoncerArrivee({
+        tempsTotal: course.moi.etat.progression.tempsTotal,
+        tempsTours: course.moi.etat.progression.tempsTours.slice(),
+      });
+    }
+  }
+
   construitScene(circuit) {
     if (this.piste) {
       detruitPiste(this.piste);
@@ -231,6 +332,7 @@ class Jeu {
 
     if (this.course && ecrans['ecran-course'].classList.contains('actif')) {
       this.majCourse(dt);
+      this.majReseau();
     }
 
     if (this.scene) this.rendu.render(this.scene, this.cameraPoursuite.camera);
@@ -358,8 +460,66 @@ class Jeu {
   }
 
   quitteCourse() {
+    if (this.course?.reseau) this.reseau?.quitter();
     this.course = null;
     montre('ecran-menu');
+  }
+
+  /**
+   * Connexion au serveur temps réel, une seule fois. On en profite pour
+   * mesurer le décalage d'horloge, dont dépend le départ synchronisé.
+   */
+  async connecteReseau() {
+    if (this.reseau?.connecte) return;
+
+    this.reseau = new Reseau();
+    await this.reseau.connecter(this.profil?.pseudo);
+    this.salonUi = new EcranSalon(this.reseau, this.catalogue);
+
+    this.reseau.on('salon:maj', (salon) => {
+      this.salonUi.affiche(salon);
+      if (document.querySelector('.ecran.actif')?.id === 'ecran-multi') montre('ecran-salon');
+    });
+
+    this.reseau.on('salon:erreur', ({ message }) => this.salonUi.erreur(message));
+
+    this.reseau.on('salon:exclu', () => {
+      this.salonUi.erreur('');
+      montre('ecran-multi');
+      document.getElementById('multi-erreur').textContent = "L'hôte t'a exclu du salon.";
+    });
+
+    this.reseau.on('salon:nouvel-hote', ({ pseudo }) =>
+      this.hud.message(`${pseudo} est le nouvel hôte`));
+
+    this.reseau.on('salon:remplacement', ({ pseudo }) =>
+      this.hud.message(`${pseudo} a repris la voiture d'un joueur déconnecté`));
+
+    this.reseau.on('course:demarrer', (depart) => this.lanceCourseReseau(depart));
+
+    this.reseau.on('course:instantane', (paquet) => {
+      for (const voiture of paquet.j) {
+        // Notre propre voiture nous revient : on garde la nôtre, qui est en
+        // avance sur ce que le serveur a reçu.
+        if (voiture.i === this.reseau.socket.id) continue;
+        this.tampon.ajoute(voiture.i, voiture, paquet.t);
+      }
+    });
+
+    this.reseau.on('course:premier', ({ pseudo, delai }) =>
+      this.hud.message(`${pseudo} a franchi la ligne — ${delai} s pour finir`));
+
+    this.reseau.on('course:resultats', (resultats) => this.afficheResultatsReseau(resultats));
+
+    this.reseau.on('deconnecte', () => {
+      if (this.course?.reseau) this.hud.message('Connexion perdue');
+    });
+  }
+
+  afficheResultatsReseau(resultats) {
+    this.course = null;
+    this.derniersResultats = resultats;
+    afficheResultatsMulti(resultats, this.reseau.socket.id);
   }
 }
 
@@ -373,8 +533,24 @@ function construitInterface(jeu) {
     'Étapes 1 à 5 : conduite, physique 3D, checkpoints, bots et course solo complète.';
 
   brancheActions(document, {
-    'grand-prix': () => ouvreConfig(jeu, 'course'),
-    'contre-la-montre': () => ouvreConfig(jeu, 'contre-la-montre'),
+    'grand-prix': () => ouvreMode(jeu, 'course', 'Grand Prix'),
+    'contre-la-montre': () => ouvreMode(jeu, 'contre-la-montre', 'Contre-la-montre'),
+    'mode-solo': () => ouvreConfig(jeu, jeu.format),
+    'mode-multi': async () => {
+      const bouton = document.querySelector('[data-action="mode-multi"]');
+      bouton.disabled = true;
+      try {
+        await jeu.connecteReseau();
+        document.getElementById('multi-erreur').textContent = '';
+        montre('ecran-multi');
+      } catch (e) {
+        document.getElementById('note-menu').textContent = `Serveur injoignable : ${e.message}`;
+      } finally {
+        bouton.disabled = false;
+      }
+    },
+    'retour-mode': () => montre('ecran-mode'),
+    'quitter-salon': () => { jeu.reseau?.quitter(); montre('ecran-multi'); },
     'parametres': () => { construitParametres(jeu); montre('ecran-parametres'); },
     'retour-menu': () => { jeu.course = null; montre('ecran-menu'); },
     'deconnexion': async () => {
@@ -390,6 +566,62 @@ function construitInterface(jeu) {
     'rejouer': () => jeu.lanceCourse(),
     'touches-defaut': () => { reinitialiseTouches(); construitParametres(jeu); }
   });
+
+  // --- Créer / rejoindre un salon ------------------------------------------
+  document.getElementById('multi-creer').onclick = async () => {
+    const reponse = await jeu.reseau.creerSalon();
+    if (!reponse?.ok) {
+      document.getElementById('multi-erreur').textContent = reponse?.message ?? 'Création impossible';
+      return;
+    }
+    jeu.salonUi.affiche(reponse.salon);
+    montre('ecran-salon');
+  };
+
+  const champCode = document.getElementById('multi-code');
+  const rejoindre = async () => {
+    const code = champCode.value.trim().toUpperCase();
+    if (code.length !== 4) {
+      document.getElementById('multi-erreur').textContent = 'Le code fait 4 caractères.';
+      return;
+    }
+    const reponse = await jeu.reseau.rejoindre(code);
+    if (!reponse?.ok) {
+      document.getElementById('multi-erreur').textContent = reponse?.message ?? 'Salon introuvable';
+      return;
+    }
+    jeu.salonUi.affiche(reponse.salon);
+    montre('ecran-salon');
+  };
+  document.getElementById('multi-rejoindre').onclick = rejoindre;
+  champCode.onkeydown = (e) => { if (e.key === 'Enter') rejoindre(); };
+}
+
+function ouvreMode(jeu, format, titre) {
+  jeu.format = format;
+  jeu.config.mode = format;
+  document.getElementById('mode-titre').textContent = titre;
+  montre('ecran-mode');
+}
+
+/** Résultats d'une course en réseau : le classement vient du serveur. */
+function afficheResultatsMulti(resultats, monId) {
+  document.getElementById('resultats-titre').textContent = 'Résultats';
+  document.getElementById('resultats-gains').textContent = '';
+
+  document.getElementById('resultats-corps').innerHTML = resultats.classement.map((c) => {
+    const temps = c.tempsTotal != null ? formateChrono(c.tempsTotal)
+      : c.rejete ? 'temps rejeté' : 'abandon';
+    const etiquette = c.bot && !c.pseudo.endsWith('(bot)') ? ' (bot)' : '';
+    return `<tr class="${c.id === monId ? 'moi' : ''}">
+      <td>${ordinal(c.place)}</td>
+      <td>${echappe(c.pseudo)}${etiquette}</td>
+      <td>${echappe(nomVoiture(c.voiture))}</td>
+      <td>${temps}</td>
+    </tr>`;
+  }).join('');
+
+  montre('ecran-resultats');
 }
 
 function brancheActions(racine, actions) {
@@ -584,6 +816,11 @@ const ligneStat = (libelle, valeur) =>
 
 // ---------------------------------------------------------------------------
 const jeu = new Jeu();
+
+// Poignée de diagnostic : le serveur décidant de tout ce qui compte, l'exposer
+// ne crée aucune faille qu'un navigateur n'offrirait pas déjà. Elle sert aux
+// tests automatiques et au débogage.
+window.__jeu = jeu;
 // Accès depuis la console du navigateur pendant le développement, pour régler
 // la physique sans repasser par les menus. Absent de la version construite.
 if (import.meta.env.DEV) window.jeu = jeu;

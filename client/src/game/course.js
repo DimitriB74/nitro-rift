@@ -87,6 +87,11 @@ export class Course {
     for (const p of this.participants) {
       if (p.arrive) continue;
 
+      // En multijoueur, les voitures des autres ne sont pas simulées ici : leur
+      // état arrive par le réseau et est posé par appliqueEtatDistant(). Les
+      // simuler en parallèle produirait deux vérités qui divergent.
+      if (p.distant) continue;
+
       const entrees = (p.humain && !p.pilotageAuto)
         ? entreesJoueur
         : entreesBot(p.bot, p.etat, this.circuit, dt);
@@ -100,6 +105,30 @@ export class Course {
 
     this.majClassement();
     this.majFinDeCourse(dt);
+  }
+
+  /**
+   * Pose l'état d'une voiture pilotée par un autre joueur, tel que le serveur
+   * l'a rediffusé. On écrit directement la position et l'orientation : on ne
+   * rejoue pas sa physique, ce serait une deuxième vérité.
+   */
+  appliqueEtatDistant(id, echantillon) {
+    const p = this.participants.find((x) => x.id === id);
+    if (!p || !p.distant || !echantillon) return;
+
+    const e = p.etat;
+    e.pos.x = echantillon.p[0]; e.pos.y = echantillon.p[1]; e.pos.z = echantillon.p[2];
+    e.avant.x = echantillon.a[0]; e.avant.y = echantillon.a[1]; e.avant.z = echantillon.a[2];
+    e.haut.x = echantillon.u[0]; e.haut.y = echantillon.u[1]; e.haut.z = echantillon.u[2];
+    e.vitesseScalaire = echantillon.v;
+    e.derapage.actif = echantillon.d > 0;
+    e.derapage.palier = Math.max(0, echantillon.d - 1);
+    e.nitro.actif = echantillon.n === 1;
+    e.progression.tour = echantillon.t;
+
+    // Le classement se calcule sur l'avancement : sans cette valeur, les
+    // voitures distantes resteraient bloquées en dernière position.
+    p.avancementDistant = echantillon.s;
   }
 
   recolteEvenements(p) {
@@ -146,12 +175,18 @@ export class Course {
    * Les arrivés se classent au temps, les autres à la distance parcourue :
    * un participant qui ne franchit pas la ligne est classé sur sa progression.
    */
+  avancementDe(p) {
+    return p.distant && p.avancementDistant != null
+      ? p.avancementDistant
+      : progressionNormalisee(p.etat, this.circuit);
+  }
+
   majClassement() {
     this.classement.sort((a, b) => {
       if (a.arrive && b.arrive) return a.tempsFinal - b.tempsFinal;
       if (a.arrive) return -1;
       if (b.arrive) return 1;
-      return b.etat.progression.avancement - a.etat.progression.avancement;
+      return this.avancementDe(b) - this.avancementDe(a);
     });
     this.classement.forEach((p, i) => { p.position = i + 1; });
   }

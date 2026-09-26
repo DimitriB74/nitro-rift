@@ -73,6 +73,74 @@
     </div>
   </section>
 
+
+  <!-- ===================================================================== -->
+  <!-- Solo ou multijoueur                                                   -->
+  <!-- ===================================================================== -->
+  <section class="ecran" id="ecran-mode">
+    <div class="bandeau">
+      <button class="bouton retour" data-action="retour-menu">← Retour</button>
+      <h2 id="mode-titre">Grand Prix</h2>
+    </div>
+    <div class="centre">
+      <nav class="menu">
+        <button class="bouton principal" data-action="mode-solo">Solo<small>Contre des bots</small></button>
+        <button class="bouton principal" data-action="mode-multi">Multijoueur<small>Salon privé avec tes amis</small></button>
+      </nav>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- Créer ou rejoindre un salon                                           -->
+  <!-- ===================================================================== -->
+  <section class="ecran" id="ecran-multi">
+    <div class="bandeau">
+      <button class="bouton retour" data-action="retour-mode">← Retour</button>
+      <h2>Multijoueur</h2>
+    </div>
+    <div class="centre">
+      <div class="panneau formulaire">
+        <button class="bouton principal" id="multi-creer">Créer un salon</button>
+        <p class="aide">Tu obtiens un code à 4 caractères à donner à tes amis.</p>
+        <label for="multi-code">Rejoindre avec un code</label>
+        <input id="multi-code" maxlength="4" placeholder="ABCD" autocomplete="off"
+               style="text-transform:uppercase;letter-spacing:.3em;text-align:center;font-size:22px">
+        <button class="bouton" id="multi-rejoindre">Rejoindre</button>
+        <p class="erreur" id="multi-erreur"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- Salon                                                                 -->
+  <!-- ===================================================================== -->
+  <section class="ecran" id="ecran-salon">
+    <div class="bandeau">
+      <button class="bouton retour" data-action="quitter-salon">← Quitter</button>
+      <h2>Salon <span class="code-salon" id="salon-code">····</span></h2>
+      <div class="credits-joueur"><span id="salon-ping">— ms</span></div>
+    </div>
+    <div class="centre large">
+      <div class="colonnes">
+        <div class="panneau">
+          <h3>Participants <small id="salon-compte"></small></h3>
+          <ul class="liste-participants" id="salon-participants"></ul>
+        </div>
+        <div class="panneau">
+          <h3>Réglages</h3>
+          <div id="salon-reglages"></div>
+          <h3 style="margin-top:18px">Ma voiture</h3>
+          <div id="salon-voitures" class="choix-voitures"></div>
+        </div>
+      </div>
+      <p class="erreur" id="salon-erreur"></p>
+      <div class="actions">
+        <button class="bouton principal" id="salon-pret">Je suis prêt</button>
+        <button class="bouton principal" id="salon-lancer" hidden>Lancer la course</button>
+      </div>
+    </div>
+  </section>
+
   <!-- ===================================================================== -->
   <!-- Configuration d'une course solo                                       -->
   <!-- ===================================================================== -->
